@@ -18,11 +18,21 @@ Run these commands on the Ubuntu server:
 sudo apt update
 sudo apt install -y curl git python3 python3-venv python3-pip
 curl -fsSL https://tailscale.com/install.sh | sh
-sudo adduser --system --group --home /opt/trade-bot tradebot
+sudo adduser --system --group --home /opt/trade-bot --shell /bin/bash tradebot
 sudo mkdir -p /opt/trade-bot
 sudo chown tradebot:tradebot /opt/trade-bot
 ```
 
+### If SSH says `This account is currently not available`
+
+The `tradebot` account needs a normal shell for key-based GitHub deployment. On an already-created server, run:
+
+```bash
+sudo usermod --shell /bin/bash tradebot
+getent passwd tradebot
+```
+
+The final field of the `tradebot` line should be `/bin/bash`. This does not enable password login; it only allows the approved SSH key to run the deployment script.
 ## 2. Clone the project and create the server virtual environment
 
 Replace `YOUR_GITHUB_NAME` and `YOUR_REPOSITORY`.
@@ -208,12 +218,28 @@ GitHub-hosted runners are not already part of your tailnet. The workflow below u
    - `TS_OAUTH_SECRET`: the Tailscale OAuth Client secret
 
 Do not put either OAuth value in `.env`, `deploy.yml`, or a Git commit.
+### Fix `403: calling actor does not have enough permissions`
+
+This error occurs before SSH and means the Tailscale OAuth credential cannot create the temporary `tag:ci` GitHub runner. In the Tailscale admin console:
+
+1. Open **Access controls → Tags** and confirm a `ci` tag exists.
+2. Open **Settings → Trust credentials** and delete/revoke the incorrect OAuth credential if you are unsure of its scopes.
+3. Create a new **Credential → OAuth** entry.
+4. Select both required scopes:
+   - **Devices → Core → Write**
+   - **Keys → Auth Keys → Write**
+5. Add **exactly** `tag:ci` under the credential's tags, then generate it.
+6. Replace both GitHub repository secrets (`TS_OAUTH_CLIENT_ID` and `TS_OAUTH_SECRET`) with the new values. Do not add quotation marks or whitespace.
+7. Run the workflow manually again.
+
+If your tailnet has a restrictive policy, also ensure `tag:ci` is owned by an administrator or permitted to be applied by the OAuth client. The GitHub action cannot create a runner without both required write scopes and permission to use that tag.
 Create `.github/workflows/deploy.yml` in the repository with:
 
 ```yaml
 name: Deploy Trade Bot
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
 
@@ -235,8 +261,74 @@ jobs:
           script: /opt/trade-bot/deploy.sh
 ```
 
+### Fix `ssh.ParsePrivateKey: ssh: no key found`
+
+This error means GitHub cannot parse the `SERVER_SSH_KEY` repository secret. It occurs before the workflow attempts to log into the server, so it is not a Tailscale or server firewall issue.
+
+1. On the server, display the **private** deployment key and copy its complete contents into GitHub's `SERVER_SSH_KEY` repository secret:
+
+```bash
+sudo -u tradebot cat /opt/trade-bot/.ssh_deploy
+```
+
+The value must start with:
+
+```text
+-----BEGIN OPENSSH PRIVATE KEY-----
+```
+
+and end with:
+
+```text
+-----END OPENSSH PRIVATE KEY-----
+```
+
+2. Do **not** use `/opt/trade-bot/.ssh_deploy.pub` for the GitHub secret. That file starts with `ssh-ed25519` and belongs only in the server's `authorized_keys` file.
+3. In GitHub, delete and recreate `SERVER_SSH_KEY`; paste the complete private key with every line preserved. Do not add quotes or spaces before/after it.
+4. Confirm the matching public key is still authorized on the server:
+
+```bash
+sudo -u tradebot cat /opt/trade-bot/.ssh_deploy.pub
+sudo -u tradebot cat /opt/trade-bot/.ssh/authorized_keys
+```
+
+The public-key line must appear in `authorized_keys`.
+### Test the workflow before relying on it
+
+1. Commit and push the workflow file to `main`.
+2. In GitHub, open **Actions → Deploy Trade Bot → Run workflow**, select `main`, and choose **Run workflow**.
+3. Open that run and confirm all steps succeed: checkout, Tailscale connection, SSH deployment, and the health check.
+4. On the server, run:
+
+```bash
+sudo -u tradebot git -C /opt/trade-bot log -1 --oneline
+sudo systemctl status tradebot-api tradebot-worker --no-pager
+curl http://127.0.0.1:8000/health
+sudo journalctl -u tradebot-api -u tradebot-worker -n 50 --no-pager
+```
+
+The commit shown by `git log` should match the commit that triggered the GitHub workflow, both services should be `active (running)`, and the health endpoint should return `"status":"healthy"`.
+
+If the workflow fails, the GitHub Actions log shows exactly where: Tailscale authentication, Tailnet/SSH access, `git pull`, dependency install, restart permission, or health check.
 Commit and push that workflow. Every later push to `main` pulls the new code, updates Python dependencies when needed, validates the backend syntax, restarts both services, and checks the local health endpoint.
 
+## One-time fix for a deployment blocked by runtime JSON files
+
+The running bot updates `database/runtime_status.json`, `database/day_trader_state.json`, and `database/strategy_lab.json`. These files are generated state, not source code, and must not be tracked by Git.
+
+After committing and pushing the `.gitignore` update that removes those files from Git tracking, run this once on the server to preserve the current strategy-lab data while applying the cleanup commit:
+
+```bash
+sudo systemctl stop tradebot-api tradebot-worker
+sudo -u tradebot mkdir -p /opt/trade-bot-state-backup
+sudo -u tradebot cp /opt/trade-bot/database/*.json /opt/trade-bot-state-backup/
+sudo -u tradebot git -C /opt/trade-bot restore database/day_trader_state.json database/runtime_status.json database/strategy_lab.json
+sudo -u tradebot git -C /opt/trade-bot pull --ff-only origin main
+sudo -u tradebot cp /opt/trade-bot-state-backup/*.json /opt/trade-bot/database/
+sudo systemctl start tradebot-api tradebot-worker
+```
+
+The backup/copy steps retain your scanner state and strategy-lab results. After this one-time repair, normal GitHub deployments will no longer conflict with those files.
 ## Everyday commands
 
 ```bash

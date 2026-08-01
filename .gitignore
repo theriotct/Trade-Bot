@@ -4,4 +4,4 @@ __pycache__/
 *.py[cod]
 database/*.db
 logs/*.log
-
+database/*.json
