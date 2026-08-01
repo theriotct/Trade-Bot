@@ -1,4 +1,4 @@
-name: Deploy Trade Bot
+name: Deploy Trade Bot v2
 
 on:
   push:
