@@ -137,7 +137,8 @@ cd /opt/trade-bot
 git pull --ff-only origin main
 /opt/trade-bot/.venv/bin/python -m pip install -r requirements.txt
 /opt/trade-bot/.venv/bin/python -m compileall -q backend
-sudo systemctl restart tradebot-api tradebot-worker
+sudo /usr/bin/systemctl restart tradebot-api
+sudo /usr/bin/systemctl restart tradebot-worker
 curl --fail --retry 10 --retry-delay 2 http://127.0.0.1:8000/health
 ```
 
@@ -152,9 +153,23 @@ sudo visudo -f /etc/sudoers.d/tradebot-deploy
 Add this single line in the editor:
 
 ```text
-tradebot ALL=(root) NOPASSWD: /bin/systemctl restart tradebot-api, /bin/systemctl restart tradebot-worker
+tradebot ALL=(root) NOPASSWD: /usr/bin/systemctl restart tradebot-api, /usr/bin/systemctl restart tradebot-worker
 ```
 
+
+Before saving the sudoers file, verify the actual systemctl path on the server:
+
+```bash
+command -v systemctl
+```
+
+If it prints a path other than `/usr/bin/systemctl`, use the printed path in both the sudoers rule and `deploy.sh`. Then verify the rule with:
+
+```bash
+sudo -l -U tradebot
+sudo -u tradebot sudo /usr/bin/systemctl restart tradebot-api
+sudo -u tradebot sudo /usr/bin/systemctl restart tradebot-worker
+```
 Test a manual deployment:
 
 ```bash
@@ -178,8 +193,21 @@ Copy the private-key output into GitHub repository **Settings → Secrets and va
 
 - `SERVER_HOST`: your server’s Tailscale hostname (preferred) or Tailscale IP
 - `SERVER_USER`: `tradebot`
-- `TAILSCALE_OAUTH_CLIENT_ID` and `TAILSCALE_OAUTH_SECRET`: credentials for a tagged, ephemeral GitHub Actions Tailscale node
+- `TS_OAUTH_CLIENT_ID` and `TS_OAUTH_SECRET`: credentials for a tagged, ephemeral GitHub Actions Tailscale node
 
+### Configure Tailscale OAuth for GitHub Actions
+
+GitHub-hosted runners are not already part of your tailnet. The workflow below uses a Tailscale OAuth client to create a short-lived, tagged `tag:ci` Tailscale device during each deployment; the device is removed when the job finishes.
+
+1. In the Tailscale admin console, open **Access controls** and create the tag `tag:ci`. In the visual editor, use **Tags → Create tag**, name it `ci`, and save it.
+2. Ensure your tailnet policy allows `tag:ci` to reach the deployment server on SSH port `22`. If your tailnet still uses Tailscale's default allow-all policy, it already can. For a restricted policy, add an ACL/grant for `tag:ci` to the server on TCP `22`.
+3. In the Tailscale admin console, open **Settings → Trust credentials**, choose **Credential → OAuth**, then select **Devices → Core → Write** and **Keys → Auth Keys → Write**. Add `tag:ci` in the tags field and generate the credential.
+4. Copy the Client ID and Client secret immediately. The secret is shown only once.
+5. In GitHub, open **Repository → Settings → Secrets and variables → Actions** and create these repository secrets:
+   - `TS_OAUTH_CLIENT_ID`: the Tailscale OAuth Client ID
+   - `TS_OAUTH_SECRET`: the Tailscale OAuth Client secret
+
+Do not put either OAuth value in `.env`, `deploy.yml`, or a Git commit.
 Create `.github/workflows/deploy.yml` in the repository with:
 
 ```yaml
@@ -194,10 +222,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: tailscale/github-action@v3
+      - uses: tailscale/github-action@v4
         with:
-          oauth-client-id: ${{ secrets.TAILSCALE_OAUTH_CLIENT_ID }}
-          oauth-secret: ${{ secrets.TAILSCALE_OAUTH_SECRET }}
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
           tags: tag:ci
       - uses: appleboy/ssh-action@v1.2.0
         with:
@@ -225,7 +253,8 @@ sudo systemctl stop tradebot-api tradebot-worker
 sudo systemctl start tradebot-api tradebot-worker
 
 # Restart both services after a manual settings/code update
-sudo systemctl restart tradebot-api tradebot-worker
+sudo /usr/bin/systemctl restart tradebot-api
+sudo /usr/bin/systemctl restart tradebot-worker
 
 # Confirm dashboard/API health
 curl http://127.0.0.1:8000/health
