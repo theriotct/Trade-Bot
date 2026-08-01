@@ -41,6 +41,13 @@ class AutoTraderSettings(BaseSettings):
         return sorted(get_settings().allowed_symbols) if values == ["*"] else values
 
     @property
+    def symbol_strategy_map(self) -> dict[str, str]:
+        pairs = (part.split(":", 1) for part in self.auto_symbol_strategies.split(",") if ":" in part)
+        return {symbol.strip().upper(): strategy.strip().lower() for symbol, strategy in pairs if strategy.strip().lower() in AVAILABLE}
+
+    def strategy_for(self, symbol: str) -> str:
+        return self.symbol_strategy_map.get(symbol.upper(), "donchian") if self.auto_strategy == "per_symbol" else self.auto_strategy
+    @property
     def strategies(self) -> list[str]:
         names = [value.strip().lower() for value in self.auto_strategies.split(",") if value.strip()]
         invalid = set(names) - AVAILABLE
@@ -61,10 +68,11 @@ def save_state(path: Path, state: dict[str, object]) -> None:
     path.write_text(json.dumps(state), encoding="utf-8")
 
 
-def decide(candles, settings: AutoTraderSettings):
-    names = [settings.auto_strategy] if settings.auto_mode == "single" else settings.strategies
-    if settings.auto_mode == "single" and settings.auto_strategy not in AVAILABLE:
-        raise ValueError(f"Unknown AUTO_STRATEGY: {settings.auto_strategy}")
+def decide(candles, settings: AutoTraderSettings, symbol: str):
+    selected = settings.strategy_for(symbol)
+    names = [selected] if settings.auto_mode == "single" else settings.strategies
+    if settings.auto_mode == "single" and selected not in AVAILABLE:
+        raise ValueError(f"Unknown strategy for {symbol}: {selected}")
     signals = selected_signals(candles, names)
     if settings.auto_mode == "single":
         return signals[0] if signals else None
@@ -85,7 +93,7 @@ def process_symbol(symbol: str, settings: AutoTraderSettings, state: dict[str, o
         return
     bar_id, price = str(candles.index[-1]), float(candles["Close"].iloc[-1])
     if lab:
-        lab.process(symbol, candles)
+        lab.process(symbol, candles, settings)
     position = database.position(symbol)
     if position:
         database.save_position(symbol, position["quantity"], position["average_price"], price)

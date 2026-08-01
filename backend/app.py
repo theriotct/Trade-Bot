@@ -3,7 +3,7 @@ from datetime import date
 from pathlib import Path
 
 from fastapi import FastAPI
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .auto_trader import AutoTraderSettings
@@ -11,7 +11,7 @@ from .config import get_settings
 from .database import Database
 from .runtime_status import read as read_runtime_status
 from .settings_store import DashboardSettings, current as current_settings, save as save_settings
-from .strategy_lab import standings
+from .strategy_lab import export_data, standings
 
 settings = get_settings()
 database = Database(settings.database_path)
@@ -75,6 +75,15 @@ def strategy_lab() -> dict:
     result = standings()
     result["enabled"] = AutoTraderSettings().strategy_lab_enabled
     return result
+
+@app.get("/api/strategy-lab/export")
+def strategy_lab_export() -> JSONResponse:
+    """Download portable, detailed Strategy Lab data for review or sharing."""
+    return JSONResponse(
+        content=export_data(),
+        headers={"Content-Disposition": 'attachment; filename="strategy-lab-export.json"'},
+    )
+
 
 @app.get("/api/reports")
 def reports() -> dict:

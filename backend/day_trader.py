@@ -32,14 +32,16 @@ def market_phase(now: datetime) -> str:
 
 
 def close_at_end_of_day(symbol: str, database: Database, broker: PaperBroker) -> float | None:
-    position = database.position(symbol)
-    if not position:
-        return
     candles = yf.download(symbol, period="1d", interval="1m", auto_adjust=True, progress=False, multi_level_index=False, timeout=10)
     if candles.empty:
-        logger.warning("Could not obtain a closing price for %s; position remains open", symbol)
-        return
+        logger.warning("Could not obtain a closing price for %s", symbol)
+        return None
     price = float(candles["Close"].iloc[-1])
+    position = database.position(symbol)
+    if not position:
+        # The Strategy Lab has independent virtual positions, so it still needs
+        # a market-close price even if the primary paper account is flat.
+        return price
     broker.execute(symbol, "close", price, position["quantity"], "Day-trader end-of-day exit")
     database.record_alert(symbol, "close", json.dumps({"source": "day_trader", "symbol": symbol, "action": "close", "price": price}), "executed: end-of-day exit")
     logger.info("Closed %s at %.2f for end of day", symbol, price)
@@ -59,6 +61,12 @@ def main() -> None:
     logger.info("Starting paper day trader for %s", ", ".join(auto.symbols))
 
     while True:
+        # Dashboard changes take effect without restarting the worker.
+        get_settings.cache_clear()
+        auto = AutoTraderSettings()
+        settings = get_settings()
+        risk.settings = settings
+        lab.enabled = auto.strategy_lab_enabled
         now = datetime.now(EASTERN)
         phase = market_phase(now)
         publish("day_trader", status=phase, symbols=auto.symbols, mode=auto.auto_mode, strategy=auto.auto_strategy, market_time=now.isoformat())
