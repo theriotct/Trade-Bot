@@ -23,6 +23,7 @@ class DashboardSettings(BaseModel):
     auto_atr_take_profit_multiple: float = Field(gt=0, le=20)
     auto_symbol_strategies: str = ""
     strategy_lab_enabled: bool = True
+    strategy_lab_extra_symbols: str = ""
     max_open_positions: int = Field(ge=1, le=50)
     max_daily_loss: float = Field(gt=0)
     max_position_value: float = Field(gt=0)
@@ -35,7 +36,7 @@ class DashboardSettings(BaseModel):
             raise ValueError("Maximum entry slots must be at least the number of whitelist symbols")
         return self
 
-    @field_validator("symbol_whitelist", "auto_symbols")
+    @field_validator("symbol_whitelist", "auto_symbols", "strategy_lab_extra_symbols")
     @classmethod
     def uppercase_symbols(cls, value: str) -> str:
         return value.strip().upper()
@@ -56,6 +57,7 @@ def current() -> DashboardSettings:
         auto_atr_take_profit_multiple=auto.auto_atr_take_profit_multiple,
         auto_symbol_strategies=auto.auto_symbol_strategies,
         strategy_lab_enabled=auto.strategy_lab_enabled,
+        strategy_lab_extra_symbols=auto.strategy_lab_extra_symbols,
         max_open_positions=core.max_open_positions,
         max_daily_loss=core.max_daily_loss,
         max_position_value=core.max_position_value,

@@ -34,11 +34,18 @@ class AutoTraderSettings(BaseSettings):
     auto_atr_take_profit_multiple: float = 2
     auto_symbol_strategies: str = ""
     strategy_lab_enabled: bool = True
+    strategy_lab_extra_symbols: str = ""
 
     @property
     def symbols(self) -> list[str]:
         values = [value.strip().upper() for value in self.auto_symbols.split(",") if value.strip()]
         return sorted(get_settings().allowed_symbols) if values == ["*"] else values
+
+    @property
+    def lab_symbols(self) -> list[str]:
+        """The live symbols plus optional lab-only symbols that can never place main-account trades."""
+        extras = [value.strip().upper() for value in self.strategy_lab_extra_symbols.split(",") if value.strip()]
+        return list(dict.fromkeys([*self.symbols, *extras]))
 
     @property
     def symbol_strategy_map(self) -> dict[str, str]:
@@ -84,6 +91,15 @@ def decide(candles, settings: AutoTraderSettings, symbol: str):
     if len(closes) >= needed:
         return "close", "; ".join(signal.reason for signal in closes)
     return None
+
+
+def process_lab_symbol(symbol: str, settings: AutoTraderSettings, lab: StrategyLab) -> None:
+    """Scan a lab-only symbol without touching the paper account or risk ledger."""
+    candles = yf.download(symbol, period=settings.auto_period, interval=settings.auto_interval, auto_adjust=True, progress=False, multi_level_index=False, timeout=10).iloc[:-1]
+    if len(candles) < 205:
+        logger.warning("%s: need at least 205 completed bars for Strategy Lab", symbol)
+        return
+    lab.process(symbol, candles, settings)
 
 
 def process_symbol(symbol: str, settings: AutoTraderSettings, state: dict[str, object], database: Database, broker: PaperBroker, risk: RiskManager, lab: StrategyLab | None = None) -> None:

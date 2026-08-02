@@ -7,7 +7,7 @@ from zoneinfo import ZoneInfo
 
 import yfinance as yf
 
-from .auto_trader import AutoTraderSettings, load_state, process_symbol, save_state
+from .auto_trader import AutoTraderSettings, load_state, process_lab_symbol, process_symbol, save_state
 from .broker import PaperBroker
 from .config import get_settings
 from .database import Database
@@ -77,9 +77,18 @@ def main() -> None:
                     save_state(state_path, state)
                 except Exception as exc:
                     logger.exception("%s failed: %s", symbol, exc)
+            if lab.enabled:
+                live_symbols = set(auto.symbols)
+                for symbol in auto.lab_symbols:
+                    if symbol in live_symbols:
+                        continue
+                    try:
+                        process_lab_symbol(symbol, auto, lab)
+                    except Exception as exc:
+                        logger.exception("Strategy Lab %s failed: %s", symbol, exc)
         elif phase == "liquidate" and now.date().isoformat() not in closed_dates:
             closing_prices: dict[str, float] = {}
-            for symbol in auto.symbols:
+            for symbol in auto.lab_symbols:
                 try:
                     price = close_at_end_of_day(symbol, database, broker)
                     if price is not None:
