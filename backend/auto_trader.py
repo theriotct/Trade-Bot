@@ -25,7 +25,7 @@ class AutoTraderSettings(BaseSettings):
     auto_interval: str = "1d"
     auto_period: str = "2y"
     auto_poll_seconds: int = 300
-    auto_mode: str = "single"  # single or consensus
+    auto_mode: str = "single"  # single, consensus, or all_strategies
     auto_strategy: str = "trend"
     auto_strategies: str = "trend,donchian,macd,bollinger,rsi,volatility_breakout,regression"
     auto_consensus_min: int = 2
@@ -34,6 +34,9 @@ class AutoTraderSettings(BaseSettings):
     auto_atr_take_profit_multiple: float = 2
     auto_symbol_strategies: str = ""
     strategy_lab_enabled: bool = True
+    auto_all_strategies_max_open: int = 42
+    auto_strategy_loss_limit: float = 3
+    auto_strategy_loss_window_minutes: int = 180
     strategy_lab_extra_symbols: str = ""
 
     @property

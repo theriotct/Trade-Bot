@@ -14,6 +14,7 @@ from .database import Database
 from .risk import RiskManager
 from .runtime_status import publish
 from .strategy_lab import StrategyLab, standings
+from .strategy_sleeves import close_all_strategy_sleeves, process_all_strategies_symbol
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -73,8 +74,11 @@ def main() -> None:
         if phase == "trade":
             for symbol in auto.symbols:
                 try:
-                    process_symbol(symbol, auto, state, database, broker, risk, lab)
-                    save_state(state_path, state)
+                    if auto.auto_mode == "all_strategies":
+                        process_all_strategies_symbol(symbol, auto, database, lab)
+                    else:
+                        process_symbol(symbol, auto, state, database, broker, risk, lab)
+                        save_state(state_path, state)
                 except Exception as exc:
                     logger.exception("%s failed: %s", symbol, exc)
             if lab.enabled:
@@ -96,7 +100,16 @@ def main() -> None:
                 except Exception as exc:
                     logger.exception("Could not close %s: %s", symbol, exc)
             lab.close_all(closing_prices)
+            if auto.auto_mode == 'all_strategies':
+                close_all_strategy_sleeves(database, closing_prices)
             summary = database.daily_trade_summary(now.date().isoformat())
+            if auto.auto_mode == 'all_strategies':
+                sleeve_summary = database.strategy_daily_trade_summary(now.date().isoformat())
+                summary = {
+                    "realized_pnl": summary["realized_pnl"] + sleeve_summary["realized_pnl"],
+                    "closed_trades": summary["closed_trades"] + sleeve_summary["closed_trades"],
+                    "wins": summary["wins"] + sleeve_summary["wins"],
+                }
             database.save_daily_report(now.date().isoformat(), summary["realized_pnl"], summary["closed_trades"], summary["wins"], standings())
             closed_dates.add(now.date().isoformat())
         time.sleep(max(auto.auto_poll_seconds, 30))

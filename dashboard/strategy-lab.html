@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Strategy Lab · Paper Desk</title>
+  <link rel="stylesheet" href="/static/styles.css?v=strategy-lab-page-1">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/"><span class="brand-mark">↗</span><span>Paper Desk<small>LOCAL AUTO TRADER</small></span></a>
+    <div class="topbar-right"><a class="settings-button" href="/">Command center</a><span id="updated" class="updated">Updating…</span><span id="status" class="status">Checking service…</span></div>
+  </header>
+  <main>
+    <section class="hero lab-hero">
+      <div><p class="eyebrow">VIRTUAL PORTFOLIOS · PAPER ONLY</p><h1>Strategy Lab</h1><p class="hero-copy">Compare every enabled strategy in separate one-share portfolios. These results never affect the main paper account.</p></div>
+      <div class="market-note" id="lab-state"><span class="dot"></span><div><strong id="lab-state-title">Checking lab…</strong><small id="lab-state-detail">Loading strategy data</small></div></div>
+    </section>
+    <section class="lab-overview" aria-label="Strategy Lab overview"><article><span>Strategies tracked</span><strong id="strategy-count">—</strong><small>Independent virtual portfolios</small></article><article><span>Symbols tested</span><strong id="symbol-count">—</strong><small>Whitelist and Lab-only symbols</small></article><article><span>Best total P/L</span><strong id="best-pnl">—</strong><small id="best-strategy">Waiting for results</small></article><a class="lab-download" href="/api/strategy-lab/export">Download data <span>JSON export →</span></a></section>
+    <section class="panel lab-page-panel"><div class="panel-title"><div><p class="section-kicker">STRATEGY STANDINGS</p><h2>Independent results</h2></div><span>Auto-refreshes every 5 seconds</span></div><div class="table-wrap"><table><thead><tr><th>Strategy</th><th>Total P/L</th><th>Realized P/L</th><th>Open</th><th>Closed trades</th></tr></thead><tbody id="strategy-standings"><tr><td colspan="5" class="empty">Loading strategy results…</td></tr></tbody></table></div></section>
+    <section class="panel lab-page-panel"><div class="panel-title"><div><p class="section-kicker">BY STOCK</p><h2>Best strategy and rankings</h2></div><span>Tap a stock for its full ranking</span></div><div class="best-strategies"><div id="best-strategies">Loading stock rankings…</div></div></section>
+  </main>
+  <footer><span>Paper trading only — not a live trading or brokerage service.</span><span>Strategy Lab is separate from the command center account.</span></footer>
+  <script src="/static/strategy-lab.js?v=strategy-lab-page-1"></script>
+</body>
+</html>

@@ -15,7 +15,7 @@ class DashboardSettings(BaseModel):
     symbol_whitelist: str = Field(min_length=1)
     auto_symbols: str = Field(min_length=1)
     auto_interval: str = Field(pattern=r"^(1m|2m|5m|15m|30m|60m|90m|1h|1d)$")
-    auto_mode: str = Field(pattern=r"^(single|consensus)$")
+    auto_mode: str = Field(pattern=r"^(single|consensus|all_strategies)$")
     auto_strategy: str = Field(pattern=r"^(trend|donchian|macd|bollinger|rsi|volatility_breakout|regression|per_symbol)$")
     auto_consensus_min: int = Field(ge=1, le=7)
     auto_max_quantity: float = Field(gt=0)
@@ -23,6 +23,9 @@ class DashboardSettings(BaseModel):
     auto_atr_take_profit_multiple: float = Field(gt=0, le=20)
     auto_symbol_strategies: str = ""
     strategy_lab_enabled: bool = True
+    auto_all_strategies_max_open: int = Field(ge=1, le=100)
+    auto_strategy_loss_limit: float = Field(gt=0)
+    auto_strategy_loss_window_minutes: int = Field(ge=5, le=1440)
     strategy_lab_extra_symbols: str = ""
     max_open_positions: int = Field(ge=1, le=50)
     max_daily_loss: float = Field(gt=0)
@@ -57,6 +60,9 @@ def current() -> DashboardSettings:
         auto_atr_take_profit_multiple=auto.auto_atr_take_profit_multiple,
         auto_symbol_strategies=auto.auto_symbol_strategies,
         strategy_lab_enabled=auto.strategy_lab_enabled,
+        auto_all_strategies_max_open=auto.auto_all_strategies_max_open,
+        auto_strategy_loss_limit=auto.auto_strategy_loss_limit,
+        auto_strategy_loss_window_minutes=auto.auto_strategy_loss_window_minutes,
         strategy_lab_extra_symbols=auto.strategy_lab_extra_symbols,
         max_open_positions=core.max_open_positions,
         max_daily_loss=core.max_daily_loss,

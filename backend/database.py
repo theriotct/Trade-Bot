@@ -1,5 +1,5 @@
 import sqlite3
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 
@@ -38,6 +38,44 @@ CREATE TABLE IF NOT EXISTS daily_reports (
     wins INTEGER NOT NULL,
     strategy_lab_json TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS strategy_positions (
+    symbol TEXT NOT NULL,
+    strategy TEXT NOT NULL,
+    quantity REAL NOT NULL,
+    average_price REAL NOT NULL,
+    current_price REAL NOT NULL,
+    stop_price REAL,
+    take_profit_price REAL,
+    entry_time TEXT NOT NULL,
+    PRIMARY KEY (symbol, strategy)
+);
+CREATE TABLE IF NOT EXISTS strategy_trades (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    strategy TEXT NOT NULL,
+    side TEXT NOT NULL,
+    quantity REAL NOT NULL,
+    entry_price REAL NOT NULL,
+    exit_price REAL,
+    pnl REAL NOT NULL DEFAULT 0,
+    reason TEXT NOT NULL,
+    status TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS strategy_sleeve_bars (
+    symbol TEXT NOT NULL,
+    strategy TEXT NOT NULL,
+    bar_id TEXT NOT NULL,
+    PRIMARY KEY (symbol, strategy)
+);
+CREATE TABLE IF NOT EXISTS strategy_sleeve_blocks (
+    symbol TEXT NOT NULL,
+    strategy TEXT NOT NULL,
+    blocked_date TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (symbol, strategy, blocked_date)
+);
 """
 
 
@@ -60,10 +98,7 @@ class Database:
 
     def record_alert(self, symbol: str, action: str, raw_payload: str, status: str) -> None:
         with self.connection() as conn:
-            conn.execute(
-                "INSERT INTO alerts (timestamp, symbol, action, raw_payload, processing_status) VALUES (?, ?, ?, ?, ?)",
-                (datetime.now(UTC).isoformat(), symbol, action, raw_payload, status),
-            )
+            conn.execute("INSERT INTO alerts (timestamp, symbol, action, raw_payload, processing_status) VALUES (?, ?, ?, ?, ?)", (datetime.now(UTC).isoformat(), symbol, action, raw_payload, status))
 
     def positions(self) -> list[dict]:
         with self.connection() as conn:
@@ -79,18 +114,11 @@ class Database:
             if quantity <= 0:
                 conn.execute("DELETE FROM positions WHERE symbol = ?", (symbol,))
             else:
-                conn.execute(
-                    "INSERT INTO positions (symbol, quantity, average_price, current_price, slot_count) VALUES (?, ?, ?, ?, ?) "
-                    "ON CONFLICT(symbol) DO UPDATE SET quantity=excluded.quantity, average_price=excluded.average_price, current_price=excluded.current_price, slot_count=excluded.slot_count",
-                    (symbol, quantity, average_price, current_price, max(1, slot_count)),
-                )
+                conn.execute("INSERT INTO positions (symbol, quantity, average_price, current_price, slot_count) VALUES (?, ?, ?, ?, ?) ON CONFLICT(symbol) DO UPDATE SET quantity=excluded.quantity, average_price=excluded.average_price, current_price=excluded.current_price, slot_count=excluded.slot_count", (symbol, quantity, average_price, current_price, max(1, slot_count)))
 
     def record_trade(self, symbol: str, side: str, quantity: float, entry_price: float, exit_price: float | None, pnl: float, strategy: str, status: str) -> None:
         with self.connection() as conn:
-            conn.execute(
-                "INSERT INTO trades (timestamp, symbol, side, quantity, entry_price, exit_price, pnl, strategy, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (datetime.now(UTC).isoformat(), symbol, side, quantity, entry_price, exit_price, pnl, strategy, status),
-            )
+            conn.execute("INSERT INTO trades (timestamp, symbol, side, quantity, entry_price, exit_price, pnl, strategy, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", (datetime.now(UTC).isoformat(), symbol, side, quantity, entry_price, exit_price, pnl, strategy, status))
 
     def recent_trades(self, limit: int = 100) -> list[dict]:
         with self.connection() as conn:
@@ -100,14 +128,66 @@ class Database:
         with self.connection() as conn:
             return [dict(row) for row in conn.execute("SELECT * FROM alerts ORDER BY id DESC LIMIT ?", (limit,))]
 
+    def strategy_positions(self) -> list[dict]:
+        with self.connection() as conn:
+            return [dict(row) for row in conn.execute("SELECT * FROM strategy_positions ORDER BY symbol, strategy")]
+
+    def strategy_position(self, symbol: str, strategy: str) -> dict | None:
+        with self.connection() as conn:
+            row = conn.execute("SELECT * FROM strategy_positions WHERE symbol = ? AND strategy = ?", (symbol, strategy)).fetchone()
+            return dict(row) if row else None
+
+    def save_strategy_position(self, symbol: str, strategy: str, quantity: float, average_price: float, current_price: float, stop_price: float | None, take_profit_price: float | None, entry_time: str) -> None:
+        with self.connection() as conn:
+            if quantity <= 0:
+                conn.execute("DELETE FROM strategy_positions WHERE symbol = ? AND strategy = ?", (symbol, strategy))
+            else:
+                conn.execute("INSERT INTO strategy_positions (symbol, strategy, quantity, average_price, current_price, stop_price, take_profit_price, entry_time) VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(symbol, strategy) DO UPDATE SET quantity=excluded.quantity, average_price=excluded.average_price, current_price=excluded.current_price, stop_price=excluded.stop_price, take_profit_price=excluded.take_profit_price, entry_time=excluded.entry_time", (symbol, strategy, quantity, average_price, current_price, stop_price, take_profit_price, entry_time))
+
+    def record_strategy_trade(self, symbol: str, strategy: str, side: str, quantity: float, entry_price: float, exit_price: float | None, pnl: float, reason: str, status: str) -> None:
+        with self.connection() as conn:
+            conn.execute("INSERT INTO strategy_trades (timestamp, symbol, strategy, side, quantity, entry_price, exit_price, pnl, reason, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (datetime.now(UTC).isoformat(), symbol, strategy, side, quantity, entry_price, exit_price, pnl, reason, status))
+
+    def recent_strategy_trades(self, limit: int = 100) -> list[dict]:
+        with self.connection() as conn:
+            return [dict(row) for row in conn.execute("SELECT * FROM strategy_trades ORDER BY id DESC LIMIT ?", (limit,))]
+
+    def sleeve_bar(self, symbol: str, strategy: str) -> str | None:
+        with self.connection() as conn:
+            row = conn.execute("SELECT bar_id FROM strategy_sleeve_bars WHERE symbol = ? AND strategy = ?", (symbol, strategy)).fetchone()
+            return row["bar_id"] if row else None
+
+    def save_sleeve_bar(self, symbol: str, strategy: str, bar_id: str) -> None:
+        with self.connection() as conn:
+            conn.execute("INSERT INTO strategy_sleeve_bars (symbol, strategy, bar_id) VALUES (?, ?, ?) ON CONFLICT(symbol, strategy) DO UPDATE SET bar_id=excluded.bar_id", (symbol, strategy, bar_id))
+
+    def sleeve_blocked(self, symbol: str, strategy: str, trading_date: str) -> bool:
+        with self.connection() as conn:
+            return conn.execute("SELECT 1 FROM strategy_sleeve_blocks WHERE symbol = ? AND strategy = ? AND blocked_date = ?", (symbol, strategy, trading_date)).fetchone() is not None
+
+    def block_sleeve(self, symbol: str, strategy: str, trading_date: str, reason: str) -> None:
+        with self.connection() as conn:
+            conn.execute("INSERT OR IGNORE INTO strategy_sleeve_blocks (symbol, strategy, blocked_date, reason, created_at) VALUES (?, ?, ?, ?, ?)", (symbol, strategy, trading_date, reason, datetime.now(UTC).isoformat()))
+
+    def sleeve_recent_realized_pnl(self, symbol: str, strategy: str, minutes: int) -> float:
+        cutoff = (datetime.now(UTC) - timedelta(minutes=minutes)).isoformat()
+        with self.connection() as conn:
+            row = conn.execute("SELECT COALESCE(SUM(pnl), 0) AS total FROM strategy_trades WHERE symbol = ? AND strategy = ? AND status = 'closed' AND timestamp >= ?", (symbol, strategy, cutoff)).fetchone()
+            return float(row["total"])
+
+    def strategy_open_count(self) -> int:
+        with self.connection() as conn:
+            return int(conn.execute("SELECT COUNT(*) AS total FROM strategy_positions").fetchone()["total"])
+
+    def strategy_realized_pnl_today(self) -> float:
+        with self.connection() as conn:
+            row = conn.execute("SELECT COALESCE(SUM(pnl), 0) AS total FROM strategy_trades WHERE status = 'closed' AND date(timestamp) = date('now')").fetchone()
+            return float(row["total"])
+
     def save_daily_report(self, report_date: str, realized_pnl: float, closed_trades: int, wins: int, strategy_lab: dict) -> None:
         import json
         with self.connection() as conn:
-            conn.execute(
-                "INSERT INTO daily_reports (report_date, realized_pnl, closed_trades, wins, strategy_lab_json) VALUES (?, ?, ?, ?, ?) "
-                "ON CONFLICT(report_date) DO UPDATE SET realized_pnl=excluded.realized_pnl, closed_trades=excluded.closed_trades, wins=excluded.wins, strategy_lab_json=excluded.strategy_lab_json",
-                (report_date, realized_pnl, closed_trades, wins, json.dumps(strategy_lab)),
-            )
+            conn.execute("INSERT INTO daily_reports (report_date, realized_pnl, closed_trades, wins, strategy_lab_json) VALUES (?, ?, ?, ?, ?) ON CONFLICT(report_date) DO UPDATE SET realized_pnl=excluded.realized_pnl, closed_trades=excluded.closed_trades, wins=excluded.wins, strategy_lab_json=excluded.strategy_lab_json", (report_date, realized_pnl, closed_trades, wins, json.dumps(strategy_lab)))
 
     def daily_reports(self) -> list[dict]:
         import json
@@ -119,16 +199,19 @@ class Database:
 
     def historical_trade_summaries(self) -> list[dict]:
         with self.connection() as conn:
-            return [dict(row) for row in conn.execute(
-                "SELECT date(timestamp) AS report_date, COALESCE(SUM(pnl), 0) AS realized_pnl, COUNT(*) AS closed_trades, COALESCE(SUM(CASE WHEN pnl > 0 THEN 1 ELSE 0 END), 0) AS wins FROM trades WHERE status = 'closed' GROUP BY date(timestamp) ORDER BY report_date DESC"
-            )]
+            return [dict(row) for row in conn.execute("SELECT date(timestamp) AS report_date, COALESCE(SUM(pnl), 0) AS realized_pnl, COUNT(*) AS closed_trades, COALESCE(SUM(CASE WHEN pnl > 0 THEN 1 ELSE 0 END), 0) AS wins FROM trades WHERE status = 'closed' GROUP BY date(timestamp) ORDER BY report_date DESC")]
+
     def daily_trade_summary(self, report_date: str) -> dict:
         with self.connection() as conn:
-            row = conn.execute(
-                "SELECT COALESCE(SUM(pnl), 0) AS realized_pnl, COUNT(*) AS closed_trades, COALESCE(SUM(CASE WHEN pnl > 0 THEN 1 ELSE 0 END), 0) AS wins FROM trades WHERE status = 'closed' AND date(timestamp) = ?",
-                (report_date,),
-            ).fetchone()
+            row = conn.execute("SELECT COALESCE(SUM(pnl), 0) AS realized_pnl, COUNT(*) AS closed_trades, COALESCE(SUM(CASE WHEN pnl > 0 THEN 1 ELSE 0 END), 0) AS wins FROM trades WHERE status = 'closed' AND date(timestamp) = ?", (report_date,)).fetchone()
             return dict(row)
+
+    def strategy_daily_trade_summary(self, report_date: str) -> dict:
+        """Summary for independent all-strategy paper sleeves."""
+        with self.connection() as conn:
+            row = conn.execute("SELECT COALESCE(SUM(pnl), 0) AS realized_pnl, COUNT(*) AS closed_trades, COALESCE(SUM(CASE WHEN pnl > 0 THEN 1 ELSE 0 END), 0) AS wins FROM strategy_trades WHERE status = 'closed' AND date(timestamp) = ?", (report_date,)).fetchone()
+            return dict(row)
+
     def realized_pnl_today(self) -> float:
         with self.connection() as conn:
             row = conn.execute("SELECT COALESCE(SUM(pnl), 0) AS total FROM trades WHERE date(timestamp) = date('now')").fetchone()
