@@ -180,6 +180,17 @@ def strategy_lab() -> dict:
     return result
 
 
+@app.get("/api/strategy-lab/charts")
+def strategy_lab_charts(start: datetime, end: datetime) -> dict:
+    start_utc = start.replace(tzinfo=UTC) if start.tzinfo is None else start.astimezone(UTC)
+    end_utc = end.replace(tzinfo=UTC) if end.tzinfo is None else end.astimezone(UTC)
+    if start_utc > end_utc:
+        return JSONResponse(status_code=422, content={"detail": "Start timestamp must be on or before end timestamp."})
+    result = standings(start=start_utc, end=end_utc)
+    result["enabled"] = AutoTraderSettings().strategy_lab_enabled
+    return result
+
+
 @app.get("/api/strategy-lab/export")
 def strategy_lab_export(start: datetime | None = None, end: datetime | None = None) -> JSONResponse:
     start_utc = start.replace(tzinfo=UTC) if start and start.tzinfo is None else start.astimezone(UTC) if start else None

@@ -147,21 +147,66 @@ def export_data(
     }
 
 
-def standings(path: Path = Path("database/strategy_lab.json")) -> dict:
+def standings(
+    path: Path = Path("database/strategy_lab.json"),
+    start: datetime | None = None,
+    end: datetime | None = None,
+) -> dict:
     try:
         state = json.loads(path.read_text(encoding="utf-8"))
     except (FileNotFoundError, json.JSONDecodeError):
         return {"enabled": False, "strategies": [], "best_by_symbol": [], "strategy_rankings": {}}
+    bounded = start is not None or end is not None
+
+    def normalized(value: datetime) -> datetime:
+        return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+
+    start_utc = normalized(start) if start else None
+    end_utc = normalized(end) if end else None
+
+    def in_window(value: str | None) -> bool:
+        if not bounded:
+            return True
+        try:
+            timestamp = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        except (TypeError, ValueError):
+            return False
+        timestamp = normalized(timestamp)
+        return (start_utc is None or timestamp >= start_utc) and (end_utc is None or timestamp <= end_utc)
+
     rows, by_symbol, strategy_rankings = [], {}, {}
     for strategy, symbols in state.get("portfolios", {}).items():
-        realized = sum(item["realized_pnl"] for item in symbols.values())
-        unrealized = sum((item["current_price"] - item["average_price"]) * item["quantity"] for item in symbols.values())
+        realized = 0.0
+        unrealized = 0.0
+        open_positions = 0
+        closed_trades = 0
         pnl = realized + unrealized
-        rows.append({"strategy": strategy, "pnl": round(pnl, 2), "realized_pnl": round(realized, 2), "open_positions": sum(1 for item in symbols.values() if item["quantity"]), "closed_trades": sum(item["closed_trades"] for item in symbols.values())})
         for symbol, item in symbols.items():
-            value = item["realized_pnl"] + (item["current_price"] - item["average_price"]) * item["quantity"]
-            strategy_rankings.setdefault(symbol, []).append({"strategy": strategy, "pnl": round(value, 2), "realized_pnl": round(item["realized_pnl"], 2), "open_position": bool(item["quantity"])})
+            if bounded:
+                selected_trades = [trade for trade in item.get("trades", []) if in_window(trade.get("exit_time"))]
+                item_open = bool(item.get("quantity")) and in_window(item.get("entry_time"))
+                item_realized = sum(float(trade.get("pnl", 0)) for trade in selected_trades)
+                item_unrealized = (item["current_price"] - item["average_price"]) * item["quantity"] if item_open else 0.0
+                item_closed = len(selected_trades)
+                active_in_window = bool(selected_trades or item_open)
+            else:
+                item_open = bool(item["quantity"])
+                item_realized = float(item["realized_pnl"])
+                item_unrealized = (item["current_price"] - item["average_price"]) * item["quantity"]
+                item_closed = int(item["closed_trades"])
+                active_in_window = True
+
+            realized += item_realized
+            unrealized += item_unrealized
+            open_positions += int(item_open)
+            closed_trades += item_closed
+            if bounded and not active_in_window:
+                continue
+            value = item_realized + item_unrealized
+            strategy_rankings.setdefault(symbol, []).append({"strategy": strategy, "pnl": round(value, 2), "realized_pnl": round(item_realized, 2), "open_position": item_open})
             if symbol not in by_symbol or value > by_symbol[symbol]["pnl"]:
                 by_symbol[symbol] = {"symbol": symbol, "strategy": strategy, "pnl": round(value, 2)}
+        pnl = realized + unrealized
+        rows.append({"strategy": strategy, "pnl": round(pnl, 2), "realized_pnl": round(realized, 2), "open_positions": open_positions, "closed_trades": closed_trades})
     rankings = {symbol: sorted(values, key=lambda row: row["pnl"], reverse=True) for symbol, values in strategy_rankings.items()}
     return {"enabled": True, "strategies": sorted(rows, key=lambda row: row["pnl"], reverse=True), "best_by_symbol": sorted(by_symbol.values(), key=lambda row: row["symbol"]), "strategy_rankings": rankings}

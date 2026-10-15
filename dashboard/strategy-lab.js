@@ -16,6 +16,8 @@ const labels = {
 
 let selectedRankSymbol = null;
 let currentLab = null;
+let currentChartLab = null;
+let chartRange = "all";
 
 function strategyName(strategy) {
   return labels[strategy] || strategy;
@@ -97,9 +99,9 @@ function renderStandings(lab) {
   byId("lab-state").classList.toggle("lab-state-disabled", !lab.enabled);
 }
 
-function renderSymbols(lab) {
-  const stocks = lab.best_by_symbol || [];
-  const rankings = lab.strategy_rankings || {};
+function renderSymbols(lab, chartLab = lab) {
+  const stocks = chartLab.best_by_symbol || [];
+  const rankings = chartLab.strategy_rankings || {};
   const query = byId("symbol-search").value.trim().toLowerCase();
   const visible = stocks.filter(stock => {
     // Every symbol has a row for every enabled strategy, so searching all
@@ -109,11 +111,11 @@ function renderSymbols(lab) {
     return searchable.includes(query);
   });
 
-  byId("symbol-count").textContent = stocks.length;
+  byId("symbol-count").textContent = (lab.best_by_symbol || []).length;
   byId("symbol-result-count").textContent = query
     ? `${visible.length} of ${stocks.length} symbols`
     : `${stocks.length} symbols`;
-  renderBarChart("strategy-chart", lab.strategies || [], {
+  renderBarChart("strategy-chart", chartLab.strategies || [], {
     title: "Total paper profit and loss by strategy",
     label: row => strategyName(row.strategy),
     detail: row => `${row.closed_trades} closed · ${row.open_positions} open`
@@ -151,7 +153,7 @@ function renderSymbols(lab) {
   byId("best-strategies").querySelectorAll("[data-rank-symbol]").forEach(button => {
     button.addEventListener("click", () => {
       selectedRankSymbol = selectedRankSymbol === button.dataset.rankSymbol ? null : button.dataset.rankSymbol;
-      renderSymbols(currentLab);
+      renderSymbols(currentLab, currentChartLab || currentLab);
     });
   });
 }
@@ -159,14 +161,40 @@ function renderSymbols(lab) {
 function render(lab) {
   currentLab = lab;
   renderStandings(lab);
-  renderSymbols(lab);
+  renderSymbols(lab, currentChartLab || lab);
+}
+
+function chartRangeQuery() {
+  if (chartRange === "all") return "";
+  const today = new Date();
+  const end = today.toISOString();
+  const start = new Date(today);
+  start.setHours(0, 0, 0, 0);
+  if (chartRange === "7d") start.setDate(start.getDate() - 6);
+  return `?${new URLSearchParams({ start: start.toISOString(), end })}`;
+}
+
+function updateChartRangeButtons() {
+  const labels = { today: "Today", "7d": "Last 7 days", all: "All time" };
+  document.querySelectorAll("[data-chart-range]").forEach(button => {
+    const selected = button.dataset.chartRange === chartRange;
+    button.setAttribute("aria-pressed", String(selected));
+  });
+  byId("chart-range-summary").textContent = labels[chartRange];
 }
 
 async function load() {
   try {
-    const [healthResponse, labResponse] = await Promise.all([fetch("/health"), fetch("/api/strategy-lab")]);
-    if (!healthResponse.ok || !labResponse.ok) throw new Error("Service request failed");
-    const [health, lab] = await Promise.all([healthResponse.json(), labResponse.json()]);
+    const rangeQuery = chartRangeQuery();
+    const [healthResponse, labResponse, chartResponse] = await Promise.all([
+      fetch("/health"), fetch("/api/strategy-lab"),
+      rangeQuery ? fetch(`/api/strategy-lab/charts${rangeQuery}`) : Promise.resolve(null)
+    ]);
+    if (!healthResponse.ok || !labResponse.ok || (chartResponse && !chartResponse.ok)) throw new Error("Service request failed");
+    const health = await healthResponse.json();
+    const lab = await labResponse.json();
+    const chartLab = chartResponse ? await chartResponse.json() : lab;
+    currentChartLab = chartLab;
     byId("status").textContent = `${health.mode.toUpperCase()} • Online`;
     byId("status").className = "status online";
     byId("updated").textContent = `Updated ${new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })}`;
@@ -179,8 +207,17 @@ async function load() {
 }
 
 byId("symbol-search").addEventListener("input", () => {
-  if (currentLab) renderSymbols(currentLab);
+  if (currentLab) renderSymbols(currentLab, currentChartLab || currentLab);
 });
+
+document.querySelectorAll("[data-chart-range]").forEach(button => {
+  button.addEventListener("click", () => {
+    chartRange = button.dataset.chartRange;
+    updateChartRangeButtons();
+    load();
+  });
+});
+updateChartRangeButtons();
 
 const exportDialog = byId("lab-export-dialog");
 const exportStart = byId("export-start");

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Strategy Lab · Paper Desk</title>
   <link rel="stylesheet" href="/static/styles.css?v=strategy-lab-page-1">
-  <link rel="stylesheet" href="/static/strategy-lab.css?v=lab-export-range-2">
+  <link rel="stylesheet" href="/static/strategy-lab.css?v=chart-filters-1">
 </head>
 <body>
   <header class="topbar">
@@ -22,6 +22,16 @@
       <div class="panel-title">
         <div><p class="section-kicker">PORTFOLIO PERFORMANCE</p><h2>Total P/L by strategy</h2></div>
         <span>Paper results · USD</span>
+      </div>
+      <div class="chart-range-bar">
+        <strong>Chart range</strong>
+        <div class="chart-range-buttons" role="group" aria-label="Chart date range">
+          <button type="button" data-chart-range="today" aria-pressed="false">Today</button>
+          <button type="button" data-chart-range="7d" aria-pressed="false">Last 7 days</button>
+          <button type="button" data-chart-range="all" aria-pressed="true">All time</button>
+        </div>
+        <span id="chart-range-summary">All time</span>
+        <small>Filters both charts and symbol rankings. Headline totals and standings stay all-time.</small>
       </div>
       <div class="lab-chart" id="strategy-chart"><p class="chart-empty">Loading strategy chart…</p></div>
     </section>
@@ -66,6 +76,6 @@
     </form>
   </dialog>
   <footer><span>Paper trading only — not a live trading or brokerage service.</span><span>Strategy Lab is separate from the command center account.</span></footer>
-  <script src="/static/strategy-lab.js?v=lab-export-range-2"></script>
+  <script src="/static/strategy-lab.js?v=chart-filters-1"></script>
 </body>
 </html>
