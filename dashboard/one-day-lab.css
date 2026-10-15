@@ -1,0 +1,343 @@
+.one-day-main {
+  padding-bottom: 24px;
+}
+
+.one-day-hero {
+  padding-bottom: 23px;
+}
+
+.one-day-notice {
+  display: grid;
+  gap: 5px;
+  margin: 0 0 17px;
+  padding: 14px 17px;
+  border: 1px solid #355074;
+  border-radius: 12px;
+  background: rgba(20, 36, 58, .75);
+  color: #aebfd5;
+  font-size: .78rem;
+  line-height: 1.5;
+}
+
+.one-day-notice strong {
+  color: #dceaff;
+}
+
+.one-day-form-panel,
+.queue-panel {
+  margin-bottom: 17px;
+}
+
+.one-day-form-panel form {
+  padding: 0 20px 20px;
+}
+
+.one-day-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 15px;
+}
+
+.one-day-fields label {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  color: #aebfd5;
+  font-size: .76rem;
+  font-weight: 700;
+}
+
+.one-day-fields input,
+.one-day-fields select,
+.symbol-picker > input {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid #324967;
+  border-radius: 8px;
+  outline: none;
+  background: #0c1422;
+  color: var(--text);
+  padding: 9px 11px;
+  font: inherit;
+  font-size: .82rem;
+}
+
+.one-day-fields input:focus,
+.one-day-fields select:focus,
+.symbol-picker > input:focus {
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, .13);
+}
+
+.one-day-fields small,
+.symbol-picker-heading small {
+  color: #71819a;
+  font-size: .68rem;
+  font-weight: 450;
+  line-height: 1.45;
+}
+
+.symbol-picker {
+  margin-top: 20px;
+}
+
+.symbol-picker-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 9px;
+}
+
+.symbol-picker-heading label {
+  display: block;
+  margin-bottom: 3px;
+  color: #aebfd5;
+  font-size: .76rem;
+  font-weight: 750;
+}
+
+.symbol-picker-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.symbol-picker-actions .secondary-button {
+  padding: 6px 9px;
+  font-size: .7rem;
+}
+
+.symbol-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  gap: 7px;
+  max-height: 230px;
+  overflow: auto;
+  margin-top: 9px;
+  padding: 10px;
+  border: 1px solid #263650;
+  border-radius: 10px;
+  background: rgba(9, 15, 26, .65);
+}
+
+.symbol-option {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  padding: 6px 7px;
+  border-radius: 6px;
+  color: #cbd8ea;
+  font-size: .73rem;
+  cursor: pointer;
+}
+
+.symbol-option:hover {
+  background: #17243a;
+}
+
+.symbol-option input {
+  accent-color: #38bdf8;
+}
+
+.queue-preview {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 14px;
+  padding: 11px 13px;
+  border: 1px solid #263650;
+  border-radius: 9px;
+  background: rgba(12, 20, 34, .72);
+  color: #aebfd5;
+  font-size: .74rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.form-message {
+  min-height: 19px;
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: .76rem;
+}
+
+.form-message.error {
+  color: var(--red);
+}
+
+.form-message.success {
+  color: var(--green);
+}
+
+.one-day-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 5px;
+}
+
+.one-day-plans {
+  display: grid;
+  gap: 12px;
+  padding: 0 20px 20px;
+}
+
+.one-day-plan {
+  overflow: hidden;
+  border: 1px solid #293d59;
+  border-radius: 11px;
+  background: rgba(12, 20, 34, .68);
+}
+
+.one-day-plan-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 14px 15px;
+}
+
+.one-day-plan-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 7px 10px;
+}
+
+.one-day-plan-title strong {
+  color: #e5eefb;
+  font-size: .86rem;
+}
+
+.one-day-plan-meta {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: .7rem;
+  line-height: 1.55;
+}
+
+.plan-status {
+  flex: 0 0 auto;
+  border: 1px solid #344968;
+  border-radius: 999px;
+  padding: 4px 8px;
+  color: #cbd8ea;
+  font-size: .63rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.plan-status.running,
+.plan-status.completed {
+  border-color: #166534;
+  background: #0d2219;
+  color: var(--green);
+}
+
+.plan-status.missed,
+.plan-status.failed {
+  border-color: #9f1239;
+  background: #2c1019;
+  color: var(--red);
+}
+
+.plan-status.cancelled {
+  color: #91a0b8;
+}
+
+.plan-cancel {
+  border: 1px solid #624454;
+  border-radius: 7px;
+  background: transparent;
+  color: #fda4af;
+  padding: 5px 8px;
+  font: inherit;
+  font-size: .68rem;
+  cursor: pointer;
+}
+
+.plan-progress {
+  padding: 0 15px 13px;
+  color: #91a0b8;
+  font-size: .72rem;
+}
+
+.plan-report {
+  border-top: 1px solid rgba(145, 160, 184, .14);
+  padding: 12px 15px 15px;
+}
+
+.plan-report summary {
+  color: #93c5fd;
+  font-size: .75rem;
+  font-weight: 750;
+  cursor: pointer;
+}
+
+.plan-report-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin: 10px 0;
+  color: #cbd8ea;
+  font-size: .72rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.plan-report-summary p {
+  flex-basis: 100%;
+  margin: 0;
+  color: var(--muted);
+}
+
+.plan-report-table {
+  max-height: 390px;
+  overflow: auto;
+}
+
+.plan-report-table table {
+  min-width: 680px;
+}
+
+.plan-report-table th,
+.plan-report-table td {
+  padding: 8px 10px;
+  font-size: .7rem;
+}
+
+.plan-trades {
+  margin-top: 9px;
+}
+
+.plan-trades summary {
+  color: #91a0b8;
+  font-size: .69rem;
+}
+
+@media (max-width: 700px) {
+  .one-day-fields {
+    grid-template-columns: 1fr;
+  }
+
+  .one-day-plan-head {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 560px) {
+  .one-day-form-panel form,
+  .one-day-plans {
+    padding-right: 15px;
+    padding-left: 15px;
+  }
+
+  .symbol-picker-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .symbol-options {
+    grid-template-columns: repeat(auto-fill, minmax(85px, 1fr));
+  }
+}

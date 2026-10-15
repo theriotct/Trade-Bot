@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>One-day Strategy Lab · Paper Desk</title>
+  <link rel="stylesheet" href="/static/styles.css?v=one-day-lab-1">
+  <link rel="stylesheet" href="/static/one-day-lab.css?v=one-day-lab-1">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/"><span class="brand-mark">↗</span><span>Paper Desk<small>LOCAL AUTO TRADER</small></span></a>
+    <div class="topbar-right"><a class="settings-button" href="/strategy-lab">Strategy Lab</a><a class="settings-button" href="/">Command center</a><span id="one-day-status" class="status">Loading</span></div>
+  </header>
+  <main class="one-day-main">
+    <section class="hero one-day-hero">
+      <div><p class="eyebrow">PAPER ONLY · ONE SESSION</p><h1>One-day Strategy Lab</h1><p class="hero-copy">Queue a strategy test for a market day. Each symbol and strategy gets its own equal starting balance, runs independently, and closes before the session ends.</p></div>
+      <div class="market-note"><span class="dot"></span><div><strong>Isolated paper runs</strong><small>Never submits brokerage orders</small></div></div>
+    </section>
+
+    <section class="one-day-notice"><strong>How a run works</strong><span>Signals use one-minute market bars with recent history for indicator warm-up. Entries are simulated at bar close, fractional shares are allowed, and commissions/slippage are not included. Each symbol–strategy run has its own starting balance and loss limit; the simultaneous-open cap applies across the queued run. Following the worker’s existing schedule, positions liquidate by 3:55 p.m. ET. Stopping a live run closes paper positions at their latest recorded prices.</span></section>
+
+    <section class="panel one-day-form-panel">
+      <div class="panel-title"><div><p class="section-kicker">BUILD A TEST</p><h2>Queue a market session</h2></div><span>Market times: Eastern</span></div>
+      <form id="one-day-form">
+        <div class="one-day-fields">
+          <label>Test date<input id="test-date" name="target_date" type="date" required><small>Weekdays only. A market holiday or missing session data will be marked as missed.</small></label>
+          <label>Strategy<select id="test-strategy" name="strategy" required></select><small>All strategies runs each strategy independently.</small></label>
+          <label>Starting amount per run ($)<input id="starting-amount" name="starting_amount" type="number" min="100" max="1000000" step="100" value="10000" required><small>Each symbol–strategy pair gets this amount; fractional shares are simulated.</small></label>
+          <label>Daily loss limit ($)<input id="loss-limit" name="loss_limit" type="number" min="1" max="5000" step="1" value="30" required><small>Closes and stops a pair once its realized plus open loss reaches this amount.</small></label>
+          <label>Max simultaneous open positions<input id="max-open-positions" name="max_open_positions" type="number" min="1" max="1000" step="1" value="20" required><small>Limits concurrent open symbol–strategy runs in this queue item.</small></label>
+        </div>
+
+        <div class="symbol-picker">
+          <div class="symbol-picker-heading"><div><label for="symbol-filter">Symbols</label><small id="symbol-selection-summary">Choose at least one configured symbol.</small></div><div class="symbol-picker-actions"><button type="button" class="secondary-button" id="select-filtered">Select filtered</button><button type="button" class="secondary-button" id="clear-symbols">Clear</button></div></div>
+          <input id="symbol-filter" type="search" placeholder="Filter configured symbols" autocomplete="off">
+          <div id="symbol-options" class="symbol-options" aria-label="Available symbols"></div>
+        </div>
+
+        <div class="queue-preview"><span id="run-preview">0 independent runs</span><span id="capital-preview">$0 virtual starting capital</span></div>
+        <p id="form-message" class="form-message" aria-live="polite"></p>
+        <div class="one-day-actions"><button class="save-button" type="submit">Queue test</button></div>
+      </form>
+    </section>
+
+    <section class="panel queue-panel">
+      <div class="panel-title"><div><p class="section-kicker">SCHEDULE & REPORTS</p><h2>Queued and recent runs</h2></div><button type="button" class="secondary-button" id="refresh-plans">Refresh</button></div>
+      <div id="one-day-plans" class="one-day-plans"><p class="empty">Loading queued sessions…</p></div>
+    </section>
+  </main>
+  <footer><span>Paper trading only — no live orders are submitted.</span><span>Each run is stored separately from the command-center paper account and Strategy Lab.</span></footer>
+  <script src="/static/one-day-lab.js?v=one-day-lab-1"></script>
+</body>
+</html>

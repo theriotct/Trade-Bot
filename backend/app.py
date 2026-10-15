@@ -3,10 +3,12 @@ import csv
 import io
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field, field_validator
 
 from .auto_trader import AutoTraderSettings
 from .config import get_settings
@@ -15,10 +17,39 @@ from .runtime_status import read as read_runtime_status
 from .settings_store import DashboardSettings, current as current_settings, save as save_settings
 from .strategy_lab import export_data, standings
 from .news_lab import NewsLab
+from .one_day_lab import OneDayLab
+from .strategies import AVAILABLE
 
 settings = get_settings()
 database = Database(settings.database_path)
 dashboard_dir = Path(__file__).resolve().parent.parent / "dashboard"
+EASTERN = ZoneInfo("America/New_York")
+one_day_lab = OneDayLab(database)
+
+
+class OneDayQueueRequest(BaseModel):
+    target_date: date
+    symbols: list[str] = Field(min_length=1, max_length=100)
+    strategy: str
+    loss_limit: float = Field(gt=0, le=5000)
+    starting_amount: float = Field(ge=100, le=1_000_000)
+    max_open_positions: int = Field(ge=1, le=1000)
+
+    @field_validator("strategy")
+    @classmethod
+    def validate_strategy(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if normalized != "all" and normalized not in AVAILABLE:
+            raise ValueError("Choose a listed strategy or all strategies.")
+        return normalized
+
+    @field_validator("symbols")
+    @classmethod
+    def normalize_symbols(cls, values: list[str]) -> list[str]:
+        normalized = list(dict.fromkeys(value.strip().upper() for value in values if value.strip()))
+        if not normalized:
+            raise ValueError("Choose at least one symbol.")
+        return normalized
 
 
 @asynccontextmanager
@@ -39,6 +70,11 @@ def dashboard() -> FileResponse:
 @app.get("/strategy-lab", include_in_schema=False)
 def strategy_lab_page() -> FileResponse:
     return FileResponse(dashboard_dir / "strategy-lab.html")
+
+
+@app.get("/one-day-lab", include_in_schema=False)
+def one_day_lab_page() -> FileResponse:
+    return FileResponse(dashboard_dir / "one-day-lab.html")
 
 
 @app.get("/health")
@@ -178,6 +214,46 @@ def strategy_lab() -> dict:
     result = standings()
     result["enabled"] = AutoTraderSettings().strategy_lab_enabled
     return result
+
+
+@app.get("/api/one-day-lab")
+def one_day_lab_view() -> dict:
+    auto = AutoTraderSettings()
+    symbols = sorted(set(auto.lab_symbols) | get_settings().allowed_symbols)
+    return {
+        "plans": one_day_lab.list_plans(), "symbols": symbols,
+        "strategies": ["all", *sorted(AVAILABLE)], "timezone": "America/New_York",
+        "session": {"open": "09:30", "liquidate_by": "15:55", "close": "16:00"},
+    }
+
+
+@app.post("/api/one-day-lab/queue")
+def one_day_lab_queue(request: OneDayQueueRequest) -> dict:
+    now = datetime.now(EASTERN)
+    if request.target_date < now.date():
+        raise HTTPException(status_code=422, detail="Choose today or a future weekday.")
+    if request.target_date.weekday() >= 5:
+        raise HTTPException(status_code=422, detail="Choose a weekday for the test session.")
+    # Compare wall-clock minutes: aware and naive datetime.time values cannot be
+    # compared directly on current Python versions.
+    if request.target_date == now.date() and (now.hour * 60 + now.minute) >= (15 * 60 + 55):
+        raise HTTPException(status_code=422, detail="Today’s session has ended. Choose a future weekday.")
+    available = set(AutoTraderSettings().lab_symbols) | get_settings().allowed_symbols
+    invalid = sorted(set(request.symbols) - available)
+    if invalid:
+        raise HTTPException(status_code=422, detail=f"Symbols are not in the configured allowed list: {', '.join(invalid)}")
+    strategies = sorted(AVAILABLE) if request.strategy == "all" else [request.strategy]
+    return one_day_lab.queue(
+        request.target_date, request.symbols, strategies,
+        request.loss_limit, request.starting_amount, request.max_open_positions,
+    )
+
+
+@app.post("/api/one-day-lab/{plan_id}/cancel")
+def one_day_lab_cancel(plan_id: str) -> dict:
+    if not one_day_lab.cancel(plan_id):
+        raise HTTPException(status_code=409, detail="This run is no longer queued or running.")
+    return {"status": "cancelled", "id": plan_id}
 
 
 @app.get("/api/strategy-lab/charts")

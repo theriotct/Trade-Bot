@@ -13,6 +13,7 @@ from .config import get_settings
 from .database import Database
 from .market_data import fetch_candles
 from .news_lab import NewsLab
+from .one_day_lab import OneDayLab
 from .risk import RiskManager
 from .runtime_status import publish
 from .strategy_lab import StrategyLab, standings
@@ -71,6 +72,7 @@ def main() -> None:
     settings = get_settings()
     database = Database(settings.database_path)
     database.initialize()
+    one_day_lab = OneDayLab(database)
     broker: PaperBroker = _build_broker(database, settings)
     broker_signature = _broker_signature(settings)
     broker_ready = True
@@ -110,6 +112,20 @@ def main() -> None:
         now = datetime.now(EASTERN)
         phase = market_phase(now)
         publish("day_trader", status=phase, symbols=auto.symbols, mode=auto.auto_mode, strategy=auto.auto_strategy, market_time=now.isoformat(), market_data_provider=settings.market_data_provider, execution_mode=settings.execution_mode, news_enabled=settings.news_enabled, execution_config_status="ready" if broker_ready else "error", message=broker_config_error or None)
+        if phase in {"trade", "liquidate"}:
+            test_symbols = one_day_lab.due_symbols(now.date())
+            test_candles = {}
+            for symbol in test_symbols:
+                try:
+                    candles = fetch_candles(symbol, period="5d", interval="1m")
+                    if len(candles) > 1:
+                        test_candles[symbol] = candles.iloc[:-1]
+                except Exception as exc:
+                    logger.exception("One-day paper test data fetch failed for %s: %s", symbol, exc)
+            try:
+                one_day_lab.tick(now, test_candles, market_open=phase == "trade", market_close=phase == "liquidate")
+            except Exception as exc:
+                logger.exception("One-day paper test processing failed: %s", exc)
         if phase == "trade":
             if settings.news_enabled and settings.news_provider == "alpaca":
                 try:

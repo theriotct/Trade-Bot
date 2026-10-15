@@ -38,6 +38,16 @@ CREATE TABLE IF NOT EXISTS daily_reports (
     wins INTEGER NOT NULL,
     strategy_lab_json TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS one_day_test_plans (
+    id TEXT PRIMARY KEY,
+    target_date TEXT NOT NULL,
+    config_json TEXT NOT NULL,
+    status TEXT NOT NULL,
+    state_json TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_one_day_test_due ON one_day_test_plans(status, target_date);
 CREATE TABLE IF NOT EXISTS strategy_positions (
     symbol TEXT NOT NULL,
     strategy TEXT NOT NULL,
