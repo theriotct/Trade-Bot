@@ -93,13 +93,15 @@
 
 .symbol-grid {
   display: grid;
+  width: 100%;
+  min-width: 0;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   align-items: stretch;
   gap: 10px;
   margin: 0;
 }
 
-@media (max-width: 980px) {
+@media (max-width: 1200px) {
   .symbol-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
