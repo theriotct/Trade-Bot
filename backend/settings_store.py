@@ -45,6 +45,7 @@ class DashboardSettings(BaseModel):
     auto_strategy_loss_limit: float = Field(gt=0)
     auto_strategy_loss_window_minutes: int = Field(ge=5, le=1440)
     strategy_lab_extra_symbols: str = ""
+    strategy_lab_symbols: list[str] = Field(default_factory=list)
     max_open_positions: int = Field(ge=1, le=50)
     max_daily_loss: float = Field(gt=0)
     max_position_value: float = Field(gt=0)
@@ -117,6 +118,7 @@ def current() -> DashboardSettings:
         auto_strategy_loss_limit=auto.auto_strategy_loss_limit,
         auto_strategy_loss_window_minutes=auto.auto_strategy_loss_window_minutes,
         strategy_lab_extra_symbols=auto.strategy_lab_extra_symbols,
+        strategy_lab_symbols=auto.lab_symbols,
         max_open_positions=core.max_open_positions,
         max_daily_loss=core.max_daily_loss,
         max_position_value=core.max_position_value,
@@ -139,6 +141,7 @@ def save(settings: DashboardSettings) -> DashboardSettings:
     secret_key = data.pop("alpaca_secret_key").strip()
     data.pop("alpaca_key_configured")
     data.pop("alpaca_secret_configured")
+    data.pop("strategy_lab_symbols", None)
     values = {key.upper(): str(value) for key, value in data.items()}
     if clear_credentials:
         values["ALPACA_API_KEY"] = ""

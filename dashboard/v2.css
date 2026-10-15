@@ -65,6 +65,13 @@ tbody tr:hover { background: rgba(103, 184, 255, .045); }
 .settings-section{margin-top:18px;padding:15px;border:1px solid #253750;border-radius:12px;background:rgba(12,20,34,.62)}
 .settings-section h3{margin:0;color:#dce8f8;font-size:.82rem;letter-spacing:.02em}
 .settings-section .settings-grid{margin-top:12px}
+.active-lab-symbols{margin-top:13px;padding:12px 13px;border:1px solid rgba(147,164,185,.15);border-radius:10px;background:rgba(5,10,17,.28)}
+.active-lab-symbols-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.active-lab-symbols-heading strong{color:#dce8f8;font-size:.76rem}
+.active-lab-symbols-heading span{color:#8ea2bc;font-size:.68rem;white-space:nowrap}
+.active-lab-symbols>p{margin:5px 0 10px;color:#7f94b0;font-size:.68rem;line-height:1.45}
+.active-lab-symbol-list{display:flex;flex-wrap:wrap;gap:6px}
+.active-lab-symbol{padding:4px 7px;border:1px solid #2d405a;border-radius:6px;background:#101a28;color:#cbd8ea;font-size:.66rem;font-weight:700;letter-spacing:.025em}
 .credential-state,.settings-section label small{color:#7f94b0;font-size:.68rem;font-weight:500}
 .checkbox-setting{display:flex!important;align-items:center;gap:9px!important;padding:9px 0}
 .checkbox-setting input{width:16px!important;height:16px;accent-color:#60a5fa}
