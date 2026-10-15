@@ -188,12 +188,24 @@ def standings(
                 item_realized = sum(float(trade.get("pnl", 0)) for trade in selected_trades)
                 item_unrealized = (item["current_price"] - item["average_price"]) * item["quantity"] if item_open else 0.0
                 item_closed = len(selected_trades)
+                item_wins = sum(float(trade.get("pnl", 0)) > 0 for trade in selected_trades)
+                item_losses = sum(float(trade.get("pnl", 0)) < 0 for trade in selected_trades)
+                item_flats = item_closed - item_wins - item_losses
                 active_in_window = bool(selected_trades or item_open)
             else:
                 item_open = bool(item["quantity"])
                 item_realized = float(item["realized_pnl"])
                 item_unrealized = (item["current_price"] - item["average_price"]) * item["quantity"]
                 item_closed = int(item["closed_trades"])
+                trade_history = item.get("trades", [])
+                if trade_history:
+                    item_wins = sum(float(trade.get("pnl", 0)) > 0 for trade in trade_history)
+                    item_losses = sum(float(trade.get("pnl", 0)) < 0 for trade in trade_history)
+                    item_flats = item_closed - item_wins - item_losses
+                else:
+                    item_wins = int(item.get("wins", 0))
+                    item_losses = max(item_closed - item_wins, 0)
+                    item_flats = 0
                 active_in_window = True
 
             realized += item_realized
@@ -203,7 +215,12 @@ def standings(
             if bounded and not active_in_window:
                 continue
             value = item_realized + item_unrealized
-            strategy_rankings.setdefault(symbol, []).append({"strategy": strategy, "pnl": round(value, 2), "realized_pnl": round(item_realized, 2), "open_position": item_open})
+            strategy_rankings.setdefault(symbol, []).append({
+                "strategy": strategy, "pnl": round(value, 2),
+                "realized_pnl": round(item_realized, 2), "open_position": item_open,
+                "closed_trades": item_closed, "wins": item_wins,
+                "losses": item_losses, "flats": item_flats,
+            })
             if symbol not in by_symbol or value > by_symbol[symbol]["pnl"]:
                 by_symbol[symbol] = {"symbol": symbol, "strategy": strategy, "pnl": round(value, 2)}
         pnl = realized + unrealized

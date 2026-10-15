@@ -462,6 +462,99 @@
   margin-bottom: 16px;
 }
 
+.win-loss-tools {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px 12px;
+  padding: 0 20px 14px;
+  color: var(--muted);
+  font-size: .75rem;
+}
+
+.win-loss-tools label {
+  color: #9eb0c9;
+  font-weight: 700;
+}
+
+.win-loss-tools select {
+  min-width: 150px;
+  border: 1px solid #324967;
+  border-radius: 8px;
+  background: #0c1422;
+  color: var(--text);
+  padding: 8px 10px;
+  font: inherit;
+}
+
+.win-loss-chart {
+  padding: 2px 20px 20px;
+}
+
+.win-loss-rows {
+  display: grid;
+  gap: 12px;
+}
+
+.win-loss-row-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 5px;
+  font-size: .76rem;
+}
+
+.win-loss-row-heading strong {
+  color: #dceaff;
+}
+
+.win-loss-row-heading span {
+  color: var(--muted);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.win-loss-bar {
+  display: flex;
+  width: 100%;
+  height: 16px;
+  overflow: hidden;
+  border: 1px solid #293d59;
+  border-radius: 999px;
+  background: #0c1422;
+}
+
+.win-loss-segment.wins {
+  background: #35c980;
+}
+
+.win-loss-segment.losses {
+  background: #e05b73;
+}
+
+.win-loss-segment.flats {
+  background: #71819a;
+}
+
+@media (max-width: 560px) {
+  .win-loss-tools,
+  .win-loss-chart {
+    padding-right: 15px;
+    padding-left: 15px;
+  }
+
+  .win-loss-row-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .win-loss-row-heading span {
+    text-align: left;
+  }
+}
+
 .lab-chart-panel .panel-title {
   align-items: end;
   padding-bottom: 10px;

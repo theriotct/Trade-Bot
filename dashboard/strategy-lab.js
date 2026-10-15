@@ -18,6 +18,7 @@ let selectedRankSymbol = null;
 let currentLab = null;
 let currentChartLab = null;
 let chartRange = "all";
+let selectedWinLossSymbol = "";
 
 function strategyName(strategy) {
   return labels[strategy] || strategy;
@@ -78,6 +79,49 @@ function renderBarChart(targetId, items, { title, label, detail }) {
   </svg>`;
 }
 
+function renderWinLossChart(chartLab) {
+  const select = byId("win-loss-symbol");
+  const target = byId("win-loss-chart");
+  const rankings = chartLab.strategy_rankings || {};
+  const symbols = Object.keys(rankings).sort();
+  if (!symbols.length) {
+    select.innerHTML = "";
+    target.innerHTML = '<p class="chart-empty">No symbol results for this chart range.</p>';
+    return;
+  }
+  if (!symbols.includes(selectedWinLossSymbol)) selectedWinLossSymbol = symbols[0];
+  const options = symbols.map(symbol => `<option value="${safe(symbol)}">${safe(symbol)}</option>`).join("");
+  if (select.innerHTML !== options) select.innerHTML = options;
+  select.value = selectedWinLossSymbol;
+
+  const rows = (rankings[selectedWinLossSymbol] || []).map(row => {
+    const wins = Number(row.wins) || 0;
+    const losses = Number(row.losses) || 0;
+    const flats = Number(row.flats) || 0;
+    const outcomes = wins + losses;
+    return { strategy: row.strategy, wins, losses, flats, outcomes, rate: outcomes ? wins / outcomes : 0 };
+  }).filter(row => row.wins + row.losses + row.flats > 0)
+    .sort((a, b) => b.rate - a.rate || b.outcomes - a.outcomes);
+
+  if (!rows.length) {
+    target.innerHTML = `<p class="chart-empty">No closed trades for ${safe(selectedWinLossSymbol)} in this chart range.</p>`;
+    return;
+  }
+  target.innerHTML = `<div class="win-loss-rows">${rows.map(row => {
+    const winWidth = row.outcomes ? row.rate * 100 : 0;
+    const lossWidth = row.outcomes ? 100 - winWidth : 0;
+    const rate = row.outcomes ? `${(row.rate * 100).toFixed(1)}% win rate` : "Flat trades only";
+    return `<article class="win-loss-row">
+      <div class="win-loss-row-heading"><strong>${safe(strategyName(row.strategy))}</strong><span>${rate} · ${row.wins}W / ${row.losses}L${row.flats ? ` / ${row.flats} flat` : ""}</span></div>
+      <div class="win-loss-bar" role="img" aria-label="${safe(strategyName(row.strategy))}: ${row.wins} wins, ${row.losses} losses, ${row.flats} flat trades">
+        ${row.wins ? `<span class="win-loss-segment wins" style="width:${winWidth}%"></span>` : ""}
+        ${row.losses ? `<span class="win-loss-segment losses" style="width:${lossWidth}%"></span>` : ""}
+        ${!row.outcomes ? '<span class="win-loss-segment flats" style="width:100%"></span>' : ""}
+      </div>
+    </article>`;
+  }).join("")}</div>`;
+}
+
 function renderStandings(lab) {
   const rows = lab.strategies || [];
   const best = rows[0];
@@ -125,6 +169,7 @@ function renderSymbols(lab, chartLab = lab) {
     label: row => row.symbol,
     detail: row => strategyName(row.strategy)
   });
+  renderWinLossChart(chartLab);
 
   if (!stocks.some(stock => stock.symbol === selectedRankSymbol)) selectedRankSymbol = null;
   byId("best-strategies").innerHTML = visible.length
@@ -208,6 +253,11 @@ async function load() {
 
 byId("symbol-search").addEventListener("input", () => {
   if (currentLab) renderSymbols(currentLab, currentChartLab || currentLab);
+});
+
+byId("win-loss-symbol").addEventListener("change", event => {
+  selectedWinLossSymbol = event.target.value;
+  if (currentChartLab) renderWinLossChart(currentChartLab);
 });
 
 document.querySelectorAll("[data-chart-range]").forEach(button => {
