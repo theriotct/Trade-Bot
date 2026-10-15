@@ -5,3 +5,4 @@ __pycache__/
 database/*.db
 logs/*.log
 database/*.json
+database/*.tmp

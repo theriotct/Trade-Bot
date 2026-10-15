@@ -76,6 +76,28 @@ CREATE TABLE IF NOT EXISTS strategy_sleeve_blocks (
     created_at TEXT NOT NULL,
     PRIMARY KEY (symbol, strategy, blocked_date)
 );
+CREATE TABLE IF NOT EXISTS news_articles (
+    article_id TEXT NOT NULL,
+    symbol TEXT NOT NULL,
+    headline TEXT NOT NULL,
+    summary TEXT NOT NULL DEFAULT '',
+    url TEXT NOT NULL DEFAULT '',
+    source TEXT NOT NULL DEFAULT '',
+    published_at TEXT NOT NULL,
+    observed_at TEXT NOT NULL,
+    sentiment_score INTEGER NOT NULL DEFAULT 0,
+    processing_status TEXT NOT NULL DEFAULT 'new',
+    PRIMARY KEY (article_id, symbol)
+);
+CREATE TABLE IF NOT EXISTS paper_order_fills (
+    client_order_id TEXT PRIMARY KEY,
+    symbol TEXT NOT NULL,
+    action TEXT NOT NULL,
+    quantity REAL NOT NULL,
+    price REAL NOT NULL,
+    realized_pnl REAL NOT NULL,
+    recorded_at TEXT NOT NULL
+);
 """
 
 
@@ -120,6 +142,45 @@ class Database:
         with self.connection() as conn:
             conn.execute("INSERT INTO trades (timestamp, symbol, side, quantity, entry_price, exit_price, pnl, strategy, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", (datetime.now(UTC).isoformat(), symbol, side, quantity, entry_price, exit_price, pnl, strategy, status))
 
+    def execute_paper_trade(self, symbol: str, action: str, price: float, quantity: float, strategy: str, client_order_id: str | None = None) -> tuple[float, float]:
+        """Apply a paper fill and its ledger row atomically. Return P/L and filled quantity."""
+        with self.connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            if client_order_id:
+                prior = conn.execute("SELECT realized_pnl, quantity FROM paper_order_fills WHERE client_order_id = ?", (client_order_id,)).fetchone()
+                if prior:
+                    return float(prior["realized_pnl"]), float(prior["quantity"])
+            row = conn.execute("SELECT * FROM positions WHERE symbol = ?", (symbol,)).fetchone()
+            position = dict(row) if row else None
+            if action == "buy":
+                old_qty = position["quantity"] if position else 0.0
+                old_avg = position["average_price"] if position else 0.0
+                new_qty = old_qty + quantity
+                new_avg = ((old_qty * old_avg) + (quantity * price)) / new_qty
+                slots = (position["slot_count"] if position else 0) + 1
+                conn.execute("INSERT INTO positions (symbol, quantity, average_price, current_price, slot_count) VALUES (?, ?, ?, ?, ?) ON CONFLICT(symbol) DO UPDATE SET quantity=excluded.quantity, average_price=excluded.average_price, current_price=excluded.current_price, slot_count=excluded.slot_count", (symbol, new_qty, new_avg, price, slots))
+                pnl = 0.0
+                side, entry_price, exit_price, status = "buy", price, None, "open"
+            else:
+                if not position:
+                    raise ValueError(f"No open position exists for {symbol}")
+                if quantity > position["quantity"]:
+                    raise ValueError(f"Cannot sell {quantity:g}; only {position['quantity']:g} shares are open")
+                fill_qty = position["quantity"] if action == "close" else quantity
+                pnl = (price - position["average_price"]) * fill_qty
+                remaining = position["quantity"] - fill_qty
+                if remaining <= 1e-12:
+                    conn.execute("DELETE FROM positions WHERE symbol = ?", (symbol,))
+                else:
+                    slots = max(1, position["slot_count"] - 1) if action == "close" else position["slot_count"]
+                    conn.execute("UPDATE positions SET quantity = ?, current_price = ?, slot_count = ? WHERE symbol = ?", (remaining, price, slots, symbol))
+                side, entry_price, exit_price, status = "sell", position["average_price"], price, "closed"
+                quantity = fill_qty
+            conn.execute("INSERT INTO trades (timestamp, symbol, side, quantity, entry_price, exit_price, pnl, strategy, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)", (datetime.now(UTC).isoformat(), symbol, side, quantity, entry_price, exit_price, pnl, strategy, status))
+            if client_order_id:
+                conn.execute("INSERT INTO paper_order_fills (client_order_id, symbol, action, quantity, price, realized_pnl, recorded_at) VALUES (?, ?, ?, ?, ?, ?, ?)", (client_order_id, symbol, action, quantity, price, pnl, datetime.now(UTC).isoformat()))
+            return pnl, quantity
+
     def recent_trades(self, limit: int = 100) -> list[dict]:
         with self.connection() as conn:
             return [dict(row) for row in conn.execute("SELECT * FROM trades ORDER BY id DESC LIMIT ?", (limit,))]
@@ -127,6 +188,23 @@ class Database:
     def recent_alerts(self, limit: int = 25) -> list[dict]:
         with self.connection() as conn:
             return [dict(row) for row in conn.execute("SELECT * FROM alerts ORDER BY id DESC LIMIT ?", (limit,))]
+
+    def save_news_article(self, article: dict) -> bool:
+        with self.connection() as conn:
+            cursor = conn.execute("INSERT OR IGNORE INTO news_articles (article_id, symbol, headline, summary, url, source, published_at, observed_at, sentiment_score, processing_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", (article["article_id"], article["symbol"], article["headline"], article.get("summary", ""), article.get("url", ""), article.get("source", ""), article["published_at"], article["observed_at"], article["sentiment_score"], article.get("processing_status", "new")))
+            return cursor.rowcount == 1
+
+    def recent_news(self, limit: int = 50) -> list[dict]:
+        with self.connection() as conn:
+            return [dict(row) for row in conn.execute("SELECT * FROM news_articles ORDER BY published_at DESC, article_id DESC LIMIT ?", (limit,))]
+
+    def pending_news(self, symbol: str, through_time: str, limit: int = 30) -> list[dict]:
+        with self.connection() as conn:
+            return [dict(row) for row in conn.execute("SELECT * FROM news_articles WHERE symbol = ? AND processing_status = 'new' AND observed_at < ? AND published_at <= ? ORDER BY published_at ASC LIMIT ?", (symbol, through_time, through_time, limit))]
+
+    def mark_news_article(self, article_id: str, symbol: str, status: str) -> None:
+        with self.connection() as conn:
+            conn.execute("UPDATE news_articles SET processing_status = ? WHERE article_id = ? AND symbol = ?", (status, article_id, symbol))
 
     def strategy_positions(self) -> list[dict]:
         with self.connection() as conn:

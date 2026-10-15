@@ -1,6 +1,6 @@
 # Strategy lab and auto trader
 
-This paper-only service runs strategies locally from OHLC candles, from locally downloaded OHLC candles. It shares the project's risk checks, SQLite trade log, and dashboard.
+This paper-only service runs selectable strategies over completed OHLC candles. It shares the project's risk checks, SQLite trade log, and dashboard. Set `MARKET_DATA_PROVIDER=alpaca` to fetch IEX bars with Alpaca or leave `yfinance` selected for Yahoo Finance.
 
 ## Supported selectable techniques
 

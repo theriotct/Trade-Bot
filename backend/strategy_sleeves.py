@@ -4,10 +4,9 @@ import logging
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-import yfinance as yf
-
 from .config import get_settings
 from .database import Database
+from .market_data import fetch_candles
 from .strategies import AVAILABLE, atr, evaluate
 from .strategy_lab import StrategyLab
 
@@ -32,14 +31,16 @@ def _maybe_block(database: Database, symbol: str, strategy: str, settings) -> No
         database.record_alert(symbol, "block", json.dumps({"source": "all_strategies_test", "strategy": strategy, "loss": loss}), f"blocked: {strategy} sleeve — {reason}")
 
 
-def process_all_strategies_symbol(symbol: str, settings, database: Database, lab: StrategyLab | None = None) -> None:
+def process_all_strategies_symbol(symbol: str, settings, database: Database, lab: StrategyLab | None = None, news_lab=None) -> None:
     """Run each strategy in a separate paper sleeve for one live-allowed symbol."""
-    candles = yf.download(symbol, period=settings.auto_period, interval=settings.auto_interval, auto_adjust=True, progress=False, multi_level_index=False, timeout=10).iloc[:-1]
+    candles = fetch_candles(symbol, settings.auto_period, settings.auto_interval).iloc[:-1]
     if len(candles) < 205:
         logger.warning("%s: need at least 205 completed bars for all-strategies test", symbol)
         return
     if lab:
         lab.process(symbol, candles, settings)
+    if news_lab:
+        news_lab.process(symbol, candles, get_settings())
     bar, price = str(candles.index[-1]), float(candles["Close"].iloc[-1])
     current_atr = atr(candles)
     trade_date = datetime.now(EASTERN).date().isoformat()

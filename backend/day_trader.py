@@ -1,16 +1,18 @@
 """US regular-hours wrapper for the local paper-only auto trader."""
 import json
+import hashlib
 import logging
 import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-import yfinance as yf
-
 from .auto_trader import AutoTraderSettings, load_state, process_lab_symbol, process_symbol, save_state
-from .broker import PaperBroker
+from .alpaca_api import get_alpaca_api
+from .broker import AlpacaPaperBroker, PaperBroker
 from .config import get_settings
 from .database import Database
+from .market_data import fetch_candles
+from .news_lab import NewsLab
 from .risk import RiskManager
 from .runtime_status import publish
 from .strategy_lab import StrategyLab, standings
@@ -33,7 +35,7 @@ def market_phase(now: datetime) -> str:
 
 
 def close_at_end_of_day(symbol: str, database: Database, broker: PaperBroker) -> float | None:
-    candles = yf.download(symbol, period="1d", interval="1m", auto_adjust=True, progress=False, multi_level_index=False, timeout=10)
+    candles = fetch_candles(symbol, period="1d", interval="1m")
     if candles.empty:
         logger.warning("Could not obtain a closing price for %s", symbol)
         return None
@@ -43,7 +45,8 @@ def close_at_end_of_day(symbol: str, database: Database, broker: PaperBroker) ->
         # The Strategy Lab has independent virtual positions, so it still needs
         # a market-close price even if the primary paper account is flat.
         return price
-    broker.execute(symbol, "close", price, position["quantity"], "Day-trader end-of-day exit")
+    client_order_id = hashlib.sha256(f"{symbol}|{datetime.now(EASTERN).date().isoformat()}|end-of-day".encode()).hexdigest()[:32]
+    broker.execute(symbol, "close", price, position["quantity"], "Day-trader end-of-day exit", client_order_id)
     database.record_alert(symbol, "close", json.dumps({"source": "day_trader", "symbol": symbol, "action": "close", "price": price}), "executed: end-of-day exit")
     logger.info("Closed %s at %.2f for end of day", symbol, price)
     return price
@@ -54,8 +57,13 @@ def main() -> None:
     settings = get_settings()
     database = Database(settings.database_path)
     database.initialize()
-    broker, risk = PaperBroker(database), RiskManager(database, settings)
+    broker: PaperBroker = PaperBroker(database)
+    if settings.execution_mode == "alpaca_paper":
+        broker = AlpacaPaperBroker(database, get_alpaca_api(settings.alpaca_api_key, settings.alpaca_secret_key))
+        broker.sync_positions()
+    risk = RiskManager(database, settings)
     lab = StrategyLab(auto.strategy_lab_enabled)
+    news_lab = NewsLab(database)
     state_path = __import__("pathlib").Path("database/day_trader_state.json")
     state = load_state(state_path)
     closed_dates: set[str] = set()
@@ -70,14 +78,21 @@ def main() -> None:
         lab.enabled = auto.strategy_lab_enabled
         now = datetime.now(EASTERN)
         phase = market_phase(now)
-        publish("day_trader", status=phase, symbols=auto.symbols, mode=auto.auto_mode, strategy=auto.auto_strategy, market_time=now.isoformat())
+        publish("day_trader", status=phase, symbols=auto.symbols, mode=auto.auto_mode, strategy=auto.auto_strategy, market_time=now.isoformat(), market_data_provider=settings.market_data_provider, execution_mode=settings.execution_mode, news_enabled=settings.news_enabled)
         if phase == "trade":
+            if settings.news_enabled and settings.news_provider == "alpaca":
+                try:
+                    added = news_lab.ingest(auto.symbols)
+                    publish("news_lab", status="connected", provider="alpaca", new_articles=added)
+                except Exception as exc:
+                    logger.exception("News scan failed: %s", exc)
+                    publish("news_lab", status="error", provider=settings.news_provider, message=str(exc))
             for symbol in auto.symbols:
                 try:
                     if auto.auto_mode == "all_strategies":
-                        process_all_strategies_symbol(symbol, auto, database, lab)
+                        process_all_strategies_symbol(symbol, auto, database, lab, news_lab)
                     else:
-                        process_symbol(symbol, auto, state, database, broker, risk, lab)
+                        process_symbol(symbol, auto, state, database, broker, risk, lab, news_lab)
                         save_state(state_path, state)
                 except Exception as exc:
                     logger.exception("%s failed: %s", symbol, exc)

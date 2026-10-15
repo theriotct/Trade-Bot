@@ -1,5 +1,7 @@
 # Start, pause, and check the paper trader
 
+The V2 project includes a local `.env` with blank Alpaca key fields. Use paper-account credentials only. Leave `EXECUTION_MODE=local` and `MARKET_DATA_PROVIDER=yfinance` until the Alpaca paper account is ready; the worker never routes orders to Alpaca's live trading host.
+
 The dashboard and day-trader worker are separate processes. Stop both when you are not paper trading to avoid using local CPU, memory, and market-data requests.
 
 ## Start the dashboard

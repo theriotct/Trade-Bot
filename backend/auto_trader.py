@@ -1,19 +1,22 @@
 """Configurable local paper trader for multiple OHLC strategy techniques."""
 import json
+import hashlib
 import logging
 import time
 from pathlib import Path
 
-import yfinance as yf
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from .broker import PaperBroker
+from .alpaca_api import AlpacaAPIError, get_alpaca_api
+from .broker import AlpacaPaperBroker, PaperBroker
 from .config import get_settings
 from .database import Database
+from .market_data import fetch_candles
 from .risk import RiskManager, RiskRejected
 from .runtime_status import publish
 from .strategies import AVAILABLE, atr, selected_signals
 from .strategy_lab import StrategyLab
+from .news_lab import NewsLab
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -98,21 +101,23 @@ def decide(candles, settings: AutoTraderSettings, symbol: str):
 
 def process_lab_symbol(symbol: str, settings: AutoTraderSettings, lab: StrategyLab) -> None:
     """Scan a lab-only symbol without touching the paper account or risk ledger."""
-    candles = yf.download(symbol, period=settings.auto_period, interval=settings.auto_interval, auto_adjust=True, progress=False, multi_level_index=False, timeout=10).iloc[:-1]
+    candles = fetch_candles(symbol, settings.auto_period, settings.auto_interval).iloc[:-1]
     if len(candles) < 205:
         logger.warning("%s: need at least 205 completed bars for Strategy Lab", symbol)
         return
     lab.process(symbol, candles, settings)
 
 
-def process_symbol(symbol: str, settings: AutoTraderSettings, state: dict[str, object], database: Database, broker: PaperBroker, risk: RiskManager, lab: StrategyLab | None = None) -> None:
-    candles = yf.download(symbol, period=settings.auto_period, interval=settings.auto_interval, auto_adjust=True, progress=False, multi_level_index=False, timeout=10).iloc[:-1]
+def process_symbol(symbol: str, settings: AutoTraderSettings, state: dict[str, object], database: Database, broker: PaperBroker, risk: RiskManager, lab: StrategyLab | None = None, news_lab: NewsLab | None = None) -> None:
+    candles = fetch_candles(symbol, settings.auto_period, settings.auto_interval).iloc[:-1]
     if len(candles) < 205:
         logger.warning("%s: need at least 205 completed bars", symbol)
         return
     bar_id, price = str(candles.index[-1]), float(candles["Close"].iloc[-1])
     if lab:
         lab.process(symbol, candles, settings)
+    if news_lab:
+        news_lab.process(symbol, candles, get_settings())
     position = database.position(symbol)
     if position:
         database.save_position(symbol, position["quantity"], position["average_price"], price)
@@ -127,6 +132,7 @@ def process_symbol(symbol: str, settings: AutoTraderSettings, state: dict[str, o
         state[symbol] = record
     if record.get("bar") == bar_id:
         return
+    previous_bar = record.get("bar")
     record["bar"] = bar_id
 
     current_atr = atr(candles)
@@ -156,25 +162,32 @@ def process_symbol(symbol: str, settings: AutoTraderSettings, state: dict[str, o
         risk_dollars = get_settings().starting_cash * get_settings().risk_percent / 100
         quantity = min(quantity, max(0.0001, risk_dollars / (current_atr * settings.auto_atr_stop_multiple)))
     payload = json.dumps({"source": "local_auto_trader", "symbol": symbol, "action": action, "price": execution_price, "quantity": quantity, "reason": reason})
+    client_order_id = hashlib.sha256(f"{symbol}|{bar_id}|{action}|{settings.auto_mode}".encode()).hexdigest()[:32]
     try:
         if action == "close" and position:
-            broker.execute(symbol, action, execution_price, quantity, f"Auto: {settings.auto_mode}")
+            execution = broker.execute(symbol, action, execution_price, quantity, f"Auto: {settings.auto_mode}", client_order_id)
         else:
             risk.validate(symbol, action, price, quantity)
-            broker.execute(symbol, action, execution_price, quantity, f"Auto: {settings.auto_mode}")
+            execution = broker.execute(symbol, action, execution_price, quantity, f"Auto: {settings.auto_mode}", client_order_id)
         if action == "buy" and current_atr:
-            record["stop_price"] = round(execution_price - current_atr * settings.auto_atr_stop_multiple, 4)
-            record["take_profit_price"] = round(execution_price + current_atr * settings.auto_atr_take_profit_multiple, 4)
+            record["stop_price"] = round(execution.price - current_atr * settings.auto_atr_stop_multiple, 4)
+            record["take_profit_price"] = round(execution.price + current_atr * settings.auto_atr_take_profit_multiple, 4)
         elif action == "close":
             record.pop("stop_price", None)
             record.pop("take_profit_price", None)
-        database.record_alert(symbol, action, payload, f"executed: {reason}")
-        publish("auto_trader", status="executed", symbol=symbol, bar=bar_id, price=execution_price, action=action, message=reason)
-        logger.info("%s %s at %.2f — %s", action.upper(), symbol, execution_price, reason)
+        database.record_alert(symbol, action, payload, f"executed: {reason}; fill {execution.price:.4f} x {execution.quantity:g} ({execution.status})")
+        publish("auto_trader", status="executed", symbol=symbol, bar=bar_id, price=execution.price, action=action, message=reason)
+        logger.info("%s %s at %.4f — %s", action.upper(), symbol, execution.price, reason)
     except RiskRejected as exc:
         database.record_alert(symbol, action, payload, f"rejected: {exc}")
         publish("auto_trader", status="rejected", symbol=symbol, bar=bar_id, price=price, action=action, message=str(exc))
         logger.warning("%s %s rejected: %s", action, symbol, exc)
+
+    except AlpacaAPIError as exc:
+        record["bar"] = previous_bar
+        database.record_alert(symbol, action, payload, f"pending: {exc}")
+        publish("auto_trader", status="broker_pending", symbol=symbol, bar=bar_id, price=price, action=action, message=str(exc))
+        logger.warning("%s %s awaits Alpaca paper fill: %s", symbol, action, exc)
 
 
 def main() -> None:
@@ -184,12 +197,17 @@ def main() -> None:
     database.initialize()
     state_path = Path("database/auto_trader_state.json")
     state = load_state(state_path)
-    broker, risk = PaperBroker(database), RiskManager(database, settings)
+    broker: PaperBroker = PaperBroker(database)
+    if settings.execution_mode == "alpaca_paper":
+        broker = AlpacaPaperBroker(database, get_alpaca_api(settings.alpaca_api_key, settings.alpaca_secret_key))
+        broker.sync_positions()
+    risk = RiskManager(database, settings)
+    news_lab = NewsLab(database)
     logger.info("Auto trader: mode=%s symbols=%s", auto.auto_mode, ", ".join(auto.symbols))
     while True:
         for symbol in auto.symbols:
             try:
-                process_symbol(symbol, auto, state, database, broker, risk)
+                process_symbol(symbol, auto, state, database, broker, risk, news_lab=news_lab)
                 save_state(state_path, state)
             except Exception as exc:
                 logger.exception("%s failed: %s", symbol, exc)
