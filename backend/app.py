@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 import csv
 import io
 import json
+import logging
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
@@ -24,6 +25,7 @@ from .strategies import AVAILABLE
 import yfinance as yf
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
 database = Database(settings.database_path)
 dashboard_dir = Path(__file__).resolve().parent.parent / "dashboard"
 EASTERN = ZoneInfo("America/New_York")
@@ -314,7 +316,11 @@ def one_day_lab_backtest(request: OneDayBacktestRequest) -> dict:
         mode="historical_backtest",
     )
     simulated_close = datetime.combine(request.target_date, time(15, 55), tzinfo=EASTERN)
-    one_day_lab.tick(simulated_close, frames, market_open=True, market_close=True)
+    try:
+        one_day_lab.tick(simulated_close, frames, market_open=True, market_close=True)
+    except Exception as exc:
+        logger.exception("Historical one-day backtest replay failed")
+        raise HTTPException(status_code=500, detail="Historical replay failed. Check the server log for the backtest error.") from exc
     with database.connection() as connection:
         row = connection.execute("SELECT * FROM one_day_test_plans WHERE id=?", (plan["id"],)).fetchone()
         state = json.loads(row["state_json"])
@@ -326,8 +332,8 @@ def one_day_lab_backtest(request: OneDayBacktestRequest) -> dict:
                 "UPDATE one_day_test_plans SET state_json=?,updated_at=? WHERE id=?",
                 (json.dumps(state), datetime.now(EASTERN).isoformat(), plan["id"]),
             )
-    result = next(item for item in one_day_lab.list_plans() if item["id"] == plan["id"])
-    return result
+            row = connection.execute("SELECT * FROM one_day_test_plans WHERE id=?", (plan["id"],)).fetchone()
+    return one_day_lab._decode(row)
 
 
 @app.post("/api/one-day-lab/{plan_id}/cancel")

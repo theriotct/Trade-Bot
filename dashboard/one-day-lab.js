@@ -187,7 +187,16 @@ async function submitRun(url, button, messageText, successText) {
     const response = await fetch(url, {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
     });
-    const result = await response.json();
+    const responseText = await response.text();
+    let result;
+    try {
+      result = JSON.parse(responseText);
+    } catch {
+      const serverError = response.status >= 500;
+      throw new Error(serverError
+        ? `The server returned ${response.status} while running the backtest. ${responseText.slice(0, 240)}`
+        : `Unexpected server response: ${responseText.slice(0, 240)}`);
+    }
     if (!response.ok) {
       const detail = result.detail;
       const errorText = typeof detail === "string" ? detail
