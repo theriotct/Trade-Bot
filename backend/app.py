@@ -82,6 +82,12 @@ def trades() -> list[dict]:
     return sorted(records, key=lambda row: row["timestamp"], reverse=True)[:100]
 
 
+@app.get("/api/realized-history")
+def realized_history() -> dict:
+    """Closed trade points for the command-center cumulative realized P/L chart."""
+    return database.realized_trade_curve(limit=5000)
+
+
 @app.get("/api/export/trades.csv")
 def export_trades_csv(days: int = Query(default=30, ge=1, le=30)) -> Response:
     """Download the selected strategy, Strategy Lab, and News Lab history as one CSV."""

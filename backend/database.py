@@ -230,6 +230,38 @@ class Database:
         with self.connection() as conn:
             return [dict(row) for row in conn.execute("SELECT * FROM strategy_trades ORDER BY id DESC LIMIT ?", (limit,))]
 
+    def realized_trade_curve(self, limit: int = 5000) -> dict:
+        """Return the latest closed trades plus the cumulative value before that window."""
+        with self.connection() as conn:
+            total = 0.0
+            closed_count = 0
+            rows: list[dict] = []
+            for table, practice in (("trades", "Selected strategy"), ("strategy_trades", "Strategy Lab")):
+                totals = conn.execute(
+                    f"SELECT COALESCE(SUM(pnl), 0) FROM {table} WHERE status = 'closed'"
+                ).fetchone()[0]
+                total += float(totals)
+                closed_count += int(conn.execute(
+                    f"SELECT COUNT(*) FROM {table} WHERE status = 'closed'"
+                ).fetchone()[0])
+                rows.extend({**dict(row), "practice": practice} for row in conn.execute(
+                    f"SELECT id, timestamp, symbol, pnl, strategy FROM {table} "
+                    "WHERE status = 'closed' ORDER BY timestamp DESC, id DESC LIMIT ?", (limit,)
+                ))
+
+        rows.sort(key=lambda row: (row["timestamp"], row["practice"], row["id"]))
+        rows = rows[-limit:]
+        window_total = sum(float(row["pnl"]) for row in rows)
+        return {
+            "opening_realized_pnl": round(total - window_total, 2),
+            "total_closed_trades": closed_count,
+            "trades": [
+                {key: row[key] for key in ("timestamp", "symbol", "pnl", "strategy", "practice")}
+                for row in rows
+            ],
+            "truncated": closed_count > len(rows),
+        }
+
     def sleeve_bar(self, symbol: str, strategy: str) -> str | None:
         with self.connection() as conn:
             row = conn.execute("SELECT bar_id FROM strategy_sleeve_bars WHERE symbol = ? AND strategy = ?", (symbol, strategy)).fetchone()
