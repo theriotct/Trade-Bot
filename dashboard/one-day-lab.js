@@ -87,6 +87,67 @@ function renderReport(plan) {
   </details>`;
 }
 
+function csvCell(value) {
+  let text = String(value ?? "");
+  if (typeof value === "string" && /^[=+@\-]/.test(text)) text = `'${text}`;
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+function exportPlanCsv(planId) {
+  const plan = plans.find(item => item.id === planId);
+  if (!plan?.report) return;
+  const report = plan.report;
+  const columns = [
+    "record_type", "run_date", "mode", "status", "strategy", "symbol",
+    "starting_amount", "loss_limit", "max_open_positions", "run_starting_capital",
+    "run_realized_pnl", "run_return_pct", "report_summary", "closed_trades", "wins", "losses",
+    "flats", "stopped", "skipped_entries", "entry_time", "exit_time", "quantity",
+    "entry_price", "exit_price", "trade_pnl", "entry_signal", "exit_reason", "pair_realized_pnl", "pair_return_pct", "data_source"
+  ];
+  const rows = [columns];
+  const add = record => rows.push(columns.map(column => record[column] ?? ""));
+  add({
+    record_type: "run_summary", run_date: plan.target_date, mode: plan.mode || "scheduled",
+    status: plan.status, loss_limit: plan.loss_limit,
+    max_open_positions: plan.max_open_positions, run_starting_capital: report.total_starting_amount,
+    run_realized_pnl: report.realized_pnl, run_return_pct: report.return_pct,
+    closed_trades: report.closed_trades, wins: report.wins, losses: report.losses,
+    report_summary: report.summary, skipped_entries: report.skipped_entries,
+    data_source: report.data_source || ""
+  });
+  for (const pair of report.pairs || []) {
+    const pairDetails = {
+      run_date: plan.target_date, mode: plan.mode || "scheduled", status: plan.status,
+      strategy: strategyName(pair.strategy), symbol: pair.symbol,
+      starting_amount: pair.starting_amount, loss_limit: plan.loss_limit,
+      max_open_positions: plan.max_open_positions, closed_trades: pair.closed_trades,
+      wins: pair.wins, losses: pair.losses, flats: pair.flats,
+      stopped: pair.stopped, skipped_entries: pair.skipped_entries,
+      pair_realized_pnl: pair.realized_pnl,
+      pair_return_pct: Number(pair.starting_amount) ? Number(pair.realized_pnl) / Number(pair.starting_amount) * 100 : 0,
+      data_source: report.data_source || ""
+    };
+    add({ record_type: "pair_summary", ...pairDetails });
+    for (const trade of pair.trades || []) {
+      add({
+        record_type: "trade", ...pairDetails, entry_time: trade.entry_time,
+        exit_time: trade.exit_time, quantity: trade.quantity,
+        entry_price: trade.entry_price, exit_price: trade.exit_price,
+        trade_pnl: trade.pnl, entry_signal: trade.entry_reason, exit_reason: trade.reason
+      });
+    }
+  }
+  const csv = `\uFEFF${rows.map(row => row.map(csvCell).join(",")).join("\r\n")}`;
+  const blobUrl = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = blobUrl;
+  link.download = `one-day-run-${plan.target_date}-${plan.id.slice(0, 8)}.csv`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+}
+
 function renderPlans() {
   const target = byId("one-day-plans");
   if (!plans.length) {
@@ -104,12 +165,13 @@ function renderPlans() {
       : plan.status === "queued" ? "Waiting for the scheduled session." : "";
     return `<article class="one-day-plan">
       <div class="one-day-plan-head"><div><div class="one-day-plan-title"><strong>${safe(title)}</strong><span class="plan-status ${safe(plan.status)}">${safe(plan.status)}</span></div><div class="one-day-plan-meta">${safe(meta)}</div></div>
-        ${["queued", "running"].includes(plan.status) ? `<button class="plan-cancel" type="button" data-cancel-plan="${safe(plan.id)}" data-status="${safe(plan.status)}">${plan.status === "running" ? "Stop run" : "Cancel"}</button>` : ""}
+        <div class="one-day-plan-actions">${plan.report ? `<button class="plan-export" type="button" data-export-plan="${safe(plan.id)}">Export CSV</button>` : ""}${["queued", "running"].includes(plan.status) ? `<button class="plan-cancel" type="button" data-cancel-plan="${safe(plan.id)}" data-status="${safe(plan.status)}">${plan.status === "running" ? "Stop run" : "Cancel"}</button>` : ""}</div>
       </div>
       ${progress ? `<div class="plan-progress">${progress}</div>` : ""}
       ${renderReport(plan)}
     </article>`;
   }).join("");
+  target.querySelectorAll("[data-export-plan]").forEach(button => button.addEventListener("click", () => exportPlanCsv(button.dataset.exportPlan)));
   target.querySelectorAll("[data-cancel-plan]").forEach(button => button.addEventListener("click", async () => {
     if (button.dataset.status === "running" && !window.confirm("Stop this test and close its simulated positions at their latest recorded prices?")) return;
     button.disabled = true;

@@ -221,6 +221,29 @@
   padding: 14px 15px;
 }
 
+.one-day-plan-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 7px;
+}
+
+.plan-export {
+  border: 1px solid #314766;
+  border-radius: 7px;
+  background: transparent;
+  color: #9fb3cc;
+  padding: 5px 8px;
+  font: inherit;
+  font-size: .68rem;
+  cursor: pointer;
+}
+
+.plan-export:hover {
+  border-color: #4c6a90;
+  color: #d9e7fa;
+}
+
 .one-day-plan-title {
   display: flex;
   align-items: center;
@@ -345,6 +368,10 @@
 
   .one-day-plan-head {
     flex-direction: column;
+  }
+
+  .one-day-plan-actions {
+    align-self: flex-end;
   }
 }
 
