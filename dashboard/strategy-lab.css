@@ -332,12 +332,6 @@
   background: #101a2a;
 }
 
-.lab-page-panel .symbol-ranking-panel {
-  grid-column: 1 / -1;
-  margin: 0;
-  padding: 13px 16px;
-}
-
 .ranking-heading {
   display: flex;
   align-items: baseline;
