@@ -93,10 +93,22 @@
 
 .symbol-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   align-items: stretch;
   gap: 10px;
   margin: 0;
+}
+
+@media (max-width: 980px) {
+  .symbol-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 760px) {
+  .symbol-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .lab-page-panel .symbol-card {
@@ -119,6 +131,7 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   width: 100%;
+  height: 136px;
   min-height: 136px;
   grid-template-rows: auto auto 1fr auto;
   align-content: stretch;
@@ -146,9 +159,12 @@
 }
 
 .symbol-card-heading strong {
+  flex: 0 0 4ch;
+  width: 4ch;
   color: #f4f7fb;
   font-size: .98rem;
   letter-spacing: .015em;
+  font-variant-numeric: tabular-nums;
 }
 
 .symbol-best {
@@ -311,6 +327,12 @@
   margin: 0 8px 8px;
   padding: 11px;
   background: #101a2a;
+}
+
+.lab-page-panel .symbol-ranking-panel {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 13px 16px;
 }
 
 .ranking-heading {

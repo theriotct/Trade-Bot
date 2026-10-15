@@ -139,15 +139,19 @@ function renderSymbols(lab, chartLab = lab) {
             <span class="symbol-card-value">${pnl(stock.pnl)}</span>
             <span class="symbol-card-hint">${expanded ? "Hide rankings ↑" : "View all rankings ↓"}</span>
           </button>
-          ${expanded ? `<div class="stock-ranking">
+        </article>`;
+      }).join("")}${selectedRankSymbol ? (() => {
+        const stock = visible.find(item => item.symbol === selectedRankSymbol);
+        if (!stock) return "";
+        const ranking = rankings[stock.symbol] || [];
+        return `<div class="symbol-ranking-panel stock-ranking">
             <div class="ranking-heading"><strong>${safe(stock.symbol)}</strong><span>Strategy ranking</span></div>
             ${ranking.length ? `<ol>${ranking.map((entry, index) => `<li class="${index === 0 ? "ranked-first" : ""}">
               <span class="ranking-name"><small>${index + 1}</small>${safe(strategyName(entry.strategy))}${entry.open_position ? '<em>Open</em>' : ""}</span>
               ${pnl(entry.pnl)}
             </li>`).join("")}</ol>` : '<p class="ranking-empty">No strategy results yet.</p>'}
-          </div>` : ""}
-        </article>`;
-      }).join("")}</div>`
+          </div>`;
+      })() : ""}</div>`
     : `<p class="symbol-empty">${query ? "No symbols or strategies match that search." : "No stock results yet."}</p>`;
 
   byId("best-strategies").querySelectorAll("[data-rank-symbol]").forEach(button => {
