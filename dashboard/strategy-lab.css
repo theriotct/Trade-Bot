@@ -310,3 +310,148 @@
     display: flex;
   }
 }
+
+.lab-chart-panel {
+  margin-bottom: 16px;
+}
+
+.lab-chart-panel .panel-title {
+  align-items: end;
+  padding-bottom: 10px;
+}
+
+.chart-tools {
+  display: grid;
+  grid-template-columns: minmax(220px, 340px) 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 0 20px 12px;
+}
+
+.chart-tools label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+.chart-tools input {
+  width: 100%;
+  min-height: 39px;
+  border: 1px solid #324967;
+  border-radius: 9px;
+  outline: none;
+  background: #0c1422;
+  color: var(--text);
+  padding: 8px 11px;
+  font: inherit;
+  font-size: .8rem;
+}
+
+.chart-tools input::placeholder {
+  color: #71819a;
+}
+
+.chart-tools input:focus {
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 3px rgba(96, 165, 250, .13);
+}
+
+.lab-chart {
+  overflow-x: auto;
+  padding: 0 18px 12px;
+  scrollbar-color: #324967 #0c1422;
+}
+
+.lab-bar-chart {
+  display: block;
+  width: 100%;
+  min-width: 600px;
+  height: auto;
+}
+
+.chart-gridline {
+  stroke: rgba(145, 160, 184, .13);
+  stroke-dasharray: 3 5;
+  stroke-width: 1;
+}
+
+.chart-zero {
+  stroke: #9aacc3;
+  stroke-opacity: .72;
+  stroke-width: 1.5;
+}
+
+.chart-label {
+  fill: #dce6f5;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.chart-detail {
+  fill: #7f90a8;
+  font-size: 10px;
+}
+
+.chart-tick {
+  fill: #91a0b8;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-bar {
+  opacity: .88;
+  transition: opacity .12s ease;
+}
+
+.chart-row:hover .chart-bar {
+  opacity: 1;
+}
+
+.chart-bar-positive {
+  fill: #4ade80;
+}
+
+.chart-bar-negative {
+  fill: #fb7185;
+}
+
+.chart-value {
+  font-size: 11px;
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-value-positive {
+  fill: #86efac;
+}
+
+.chart-value-negative {
+  fill: #fda4af;
+}
+
+.chart-empty {
+  margin: 0;
+  padding: 20px 4px;
+  color: var(--muted);
+  font-size: .77rem;
+}
+
+@media (max-width: 700px) {
+  .chart-tools {
+    grid-template-columns: 1fr;
+    padding-right: 15px;
+    padding-left: 15px;
+  }
+
+  .lab-chart {
+    padding-right: 12px;
+    padding-left: 12px;
+  }
+
+  .lab-chart-panel .panel-title > span {
+    white-space: normal;
+  }
+}

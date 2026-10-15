@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Strategy Lab · Paper Desk</title>
   <link rel="stylesheet" href="/static/styles.css?v=strategy-lab-page-1">
-  <link rel="stylesheet" href="/static/strategy-lab.css?v=strategy-lab-cleanup-1">
+  <link rel="stylesheet" href="/static/strategy-lab.css?v=strategy-lab-charts-1">
 </head>
 <body>
   <header class="topbar">
@@ -18,6 +18,24 @@
       <div class="market-note" id="lab-state"><span class="dot"></span><div><strong id="lab-state-title">Checking lab…</strong><small id="lab-state-detail">Loading strategy data</small></div></div>
     </section>
     <section class="lab-overview" aria-label="Strategy Lab overview"><article><span>Strategies tracked</span><strong id="strategy-count">—</strong><small>Independent virtual portfolios</small></article><article><span>Symbols tested</span><strong id="symbol-count">—</strong><small>Whitelist and Lab-only symbols</small></article><article><span>Best total P/L</span><strong id="best-pnl">—</strong><small id="best-strategy">Waiting for results</small></article><a class="lab-download" href="/api/strategy-lab/export">Download data <span>JSON export →</span></a></section>
+    <section class="panel lab-chart-panel">
+      <div class="panel-title">
+        <div><p class="section-kicker">PORTFOLIO PERFORMANCE</p><h2>Total P/L by strategy</h2></div>
+        <span>Paper results · USD</span>
+      </div>
+      <div class="lab-chart" id="strategy-chart"><p class="chart-empty">Loading strategy chart…</p></div>
+    </section>
+    <section class="panel lab-chart-panel">
+      <div class="panel-title">
+        <div><p class="section-kicker">SYMBOL COMPARISON</p><h2>Top strategy result for each symbol</h2></div>
+        <span id="symbol-result-count" aria-live="polite">Loading symbols…</span>
+      </div>
+      <div class="chart-tools">
+        <label for="symbol-search">Search symbols or strategies</label>
+        <input id="symbol-search" type="search" placeholder="Try AAPL or MACD" autocomplete="off">
+      </div>
+      <div class="lab-chart" id="symbol-chart"><p class="chart-empty">Loading symbol chart…</p></div>
+    </section>
     <section class="panel lab-page-panel">
       <div class="panel-title">
         <div><p class="section-kicker">STRATEGY STANDINGS</p><h2>Independent results</h2></div>
@@ -32,18 +50,13 @@
     </section>
     <section class="panel lab-page-panel symbol-panel">
       <div class="panel-title symbol-panel-title">
-        <div><p class="section-kicker">SYMBOL BREAKDOWN</p><h2>Find a symbol’s strategy ranking</h2></div>
-        <span id="symbol-result-count" aria-live="polite">Loading symbols…</span>
-      </div>
-      <div class="symbol-tools">
-        <label class="symbol-search-label" for="symbol-search">Search symbols or strategies</label>
-        <input id="symbol-search" type="search" placeholder="Try AAPL or MACD" autocomplete="off">
-        <p>Choose a symbol to compare every strategy’s result.</p>
+        <div><p class="section-kicker">DETAIL VIEW</p><h2>Strategy rankings by symbol</h2></div>
+        <span>Choose a symbol to compare every strategy</span>
       </div>
       <div class="best-strategies" id="best-strategies" aria-live="polite">Loading stock rankings…</div>
     </section>
   </main>
   <footer><span>Paper trading only — not a live trading or brokerage service.</span><span>Strategy Lab is separate from the command center account.</span></footer>
-  <script src="/static/strategy-lab.js?v=strategy-lab-cleanup-1"></script>
+  <script src="/static/strategy-lab.js?v=strategy-lab-charts-1"></script>
 </body>
 </html>
