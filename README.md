@@ -35,7 +35,7 @@ ALPACA_DATA_FEED=iex
 EXECUTION_MODE=alpaca_paper
 ```
 
-To enable the separate news experiment, also set `NEWS_ENABLED=true`. Restart the worker after changing `.env`. Headlines older than `NEWS_MAX_AGE_MINUTES` (30 by default) are shown but excluded from the experiment so startup history does not create stale entries. The Basic feed is pinned to IEX, and the client limits itself to 180 requests per rolling minute to leave room below the documented historical-data request cap. Alpaca orders always go to `paper-api.alpaca.markets`.
+To enable the separate news experiment, also set `NEWS_ENABLED=true`. Restart the worker after changing `.env`. Headlines older than `NEWS_MAX_AGE_MINUTES` (30 by default) are shown but excluded from the experiment so startup history does not create stale entries. The Basic feed is pinned to IEX. Alpaca traffic is rate-limited in separate lanes: market data is capped at 150 requests per rolling minute (below the documented 200 historical calls/minute), paper order submissions have a separate 90-request budget, and other paper-account reads have a 30-request budget. This keeps this process's bars/news requests from consuming its order/close budget. These are per-process client limits; they cannot guarantee availability during Alpaca outages, account-level restrictions, or traffic from another process using the same credentials. Alpaca orders always go to `paper-api.alpaca.markets`.
 
 You can leave `MARKET_DATA_PROVIDER=yfinance` and `EXECUTION_MODE=local` to use the existing local simulator without Alpaca credentials. In `AUTO_MODE=all_strategies`, the strategy sleeves remain virtual and independent of the selected broker mode.
 

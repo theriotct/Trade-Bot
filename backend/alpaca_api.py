@@ -53,10 +53,24 @@ class AlpacaAPI:
             "Accept": "application/json",
             "User-Agent": "trade-bot-v2/1.0",
         })
-        self._budget = _RequestBudget()
+        # Keep market-data traffic away from order submission. The Basic
+        # market-data plan allows 200 historical requests/minute; reserve 50
+        # for headroom and let the paper-trading API use its own budget.
+        self._market_data_budget = _RequestBudget(limit=150)
+        # Alpaca does not publish a fixed direct Trading API limit. These are
+        # conservative per-process ceilings, with most local capacity
+        # reserved for orders (including closes) instead of account/order reads.
+        self._order_budget = _RequestBudget(limit=90)
+        self._trading_read_budget = _RequestBudget(limit=30)
 
     def _request(self, method: str, url: str, **kwargs) -> dict | list:
-        self._budget.wait()
+        if url.startswith(DATA_URL):
+            budget = self._market_data_budget
+        elif method.upper() == "POST":
+            budget = self._order_budget
+        else:
+            budget = self._trading_read_budget
+        budget.wait()
         try:
             response = self.session.request(method, url, timeout=(5, 20), **kwargs)
             if response.status_code == 429:

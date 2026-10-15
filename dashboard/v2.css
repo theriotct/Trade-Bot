@@ -62,6 +62,15 @@ th, td { padding-top: 12px; padding-bottom: 12px; }
 tbody tr:hover { background: rgba(103, 184, 255, .045); }
 .tag { border-radius: 6px; }
 .settings-dialog { border-color: #35506e; }
+.settings-section{margin-top:18px;padding:15px;border:1px solid #253750;border-radius:12px;background:rgba(12,20,34,.62)}
+.settings-section h3{margin:0;color:#dce8f8;font-size:.82rem;letter-spacing:.02em}
+.settings-section .settings-grid{margin-top:12px}
+.credential-state,.settings-section label small{color:#7f94b0;font-size:.68rem;font-weight:500}
+.checkbox-setting{display:flex!important;align-items:center;gap:9px!important;padding:9px 0}
+.checkbox-setting input{width:16px!important;height:16px;accent-color:#60a5fa}
+.settings-dialog form>.settings-head{position:sticky;top:-24px;z-index:2;margin:-24px -24px 15px;padding:20px 24px;background:#101a2a;border-bottom:1px solid #263650}
+.settings-dialog form>.settings-actions{position:sticky;bottom:-24px;z-index:2;margin:0 -24px -24px;padding:14px 24px;background:#101a2a;border-top:1px solid #263650}
+@media(max-width:620px){.settings-section{padding:12px}.settings-dialog form>.settings-head{top:-18px;margin:-18px -18px 12px;padding:16px 18px}.settings-dialog form>.settings-actions{bottom:-18px;margin:0 -18px -18px;padding:12px 18px}}
 a:focus-visible, button:focus-visible, input:focus-visible, select:focus-visible, [tabindex]:focus-visible {
   outline: 2px solid var(--blue);
   outline-offset: 3px;
