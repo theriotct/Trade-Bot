@@ -181,8 +181,15 @@ def strategy_lab() -> dict:
 
 
 @app.get("/api/strategy-lab/export")
-def strategy_lab_export() -> JSONResponse:
-    return JSONResponse(content=export_data(), headers={"Content-Disposition": 'attachment; filename="strategy-lab-export.json"'})
+def strategy_lab_export(start: datetime | None = None, end: datetime | None = None) -> JSONResponse:
+    start_utc = start.replace(tzinfo=UTC) if start and start.tzinfo is None else start.astimezone(UTC) if start else None
+    end_utc = end.replace(tzinfo=UTC) if end and end.tzinfo is None else end.astimezone(UTC) if end else None
+    if start_utc and end_utc and start_utc > end_utc:
+        return JSONResponse(status_code=422, content={"detail": "Start timestamp must be on or before end timestamp."})
+    return JSONResponse(
+        content=export_data(start=start_utc, end=end_utc),
+        headers={"Content-Disposition": 'attachment; filename="strategy-lab-export.json"'},
+    )
 
 
 @app.get("/api/reports")

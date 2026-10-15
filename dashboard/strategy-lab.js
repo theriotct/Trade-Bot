@@ -102,9 +102,10 @@ function renderSymbols(lab) {
   const rankings = lab.strategy_rankings || {};
   const query = byId("symbol-search").value.trim().toLowerCase();
   const visible = stocks.filter(stock => {
-    const ranking = rankings[stock.symbol] || [];
-    const searchable = [stock.symbol, strategyName(stock.strategy), ...ranking.map(row => strategyName(row.strategy))]
-      .join(" ").toLowerCase();
+    // Every symbol has a row for every enabled strategy, so searching all
+    // rankings makes a strategy query match the entire universe. Search the
+    // symbol and its top result instead.
+    const searchable = [stock.symbol, strategyName(stock.strategy)].join(" ").toLowerCase();
     return searchable.includes(query);
   });
 
@@ -179,6 +180,64 @@ async function load() {
 
 byId("symbol-search").addEventListener("input", () => {
   if (currentLab) renderSymbols(currentLab);
+});
+
+const exportDialog = byId("lab-export-dialog");
+const exportStart = byId("export-start");
+const exportEnd = byId("export-end");
+const localDate = date => {
+  const offset = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 10);
+};
+const startOfLocalDate = value => new Date(`${value}T00:00:00`).toISOString();
+const endOfLocalDate = value => {
+  const next = new Date(`${value}T00:00:00`);
+  next.setDate(next.getDate() + 1);
+  return new Date(next.getTime() - 1).toISOString();
+};
+
+function setExportRange(range) {
+  const today = new Date();
+  const todayText = localDate(today);
+  if (range === "all") {
+    exportStart.value = "";
+    exportEnd.value = "";
+    return;
+  }
+  exportEnd.value = todayText;
+  if (range === "today") {
+    exportStart.value = todayText;
+    return;
+  }
+  const start = new Date(`${todayText}T00:00:00`);
+  start.setDate(start.getDate() - Number(range) + 1);
+  exportStart.value = localDate(start);
+}
+
+byId("open-lab-export").addEventListener("click", () => {
+  setExportRange("today");
+  byId("lab-export-message").textContent = "";
+  exportDialog.showModal();
+});
+byId("close-lab-export").addEventListener("click", () => exportDialog.close());
+byId("cancel-lab-export").addEventListener("click", () => exportDialog.close());
+exportDialog.querySelectorAll("[data-export-range]").forEach(button => {
+  button.addEventListener("click", () => setExportRange(button.dataset.exportRange));
+});
+byId("lab-export-form").addEventListener("submit", event => {
+  event.preventDefault();
+  const start = exportStart.value;
+  const end = exportEnd.value;
+  const message = byId("lab-export-message");
+  if (start && end && start > end) {
+    message.textContent = "The start date must be on or before the end date.";
+    return;
+  }
+  const params = new URLSearchParams();
+  if (start) params.set("start", startOfLocalDate(start));
+  if (end) params.set("end", endOfLocalDate(end));
+  window.location.href = `/api/strategy-lab/export${params.size ? `?${params}` : ""}`;
+  exportDialog.close();
 });
 
 load();

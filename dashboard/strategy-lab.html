@@ -5,19 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Strategy Lab · Paper Desk</title>
   <link rel="stylesheet" href="/static/styles.css?v=strategy-lab-page-1">
-  <link rel="stylesheet" href="/static/strategy-lab.css?v=strategy-lab-charts-1">
+  <link rel="stylesheet" href="/static/strategy-lab.css?v=lab-export-range-2">
 </head>
 <body>
   <header class="topbar">
     <a class="brand" href="/"><span class="brand-mark">↗</span><span>Paper Desk<small>LOCAL AUTO TRADER</small></span></a>
-    <div class="topbar-right"><a class="settings-button" href="/">Command center</a><span id="updated" class="updated">Updating…</span><span id="status" class="status">Checking service…</span></div>
+    <div class="topbar-right"><a class="settings-button" href="/?settings=strategy-lab">Lab settings</a><a class="settings-button" href="/">Command center</a><span id="updated" class="updated">Updating…</span><span id="status" class="status">Checking service…</span></div>
   </header>
   <main>
     <section class="hero lab-hero">
       <div><p class="eyebrow">VIRTUAL PORTFOLIOS · PAPER ONLY</p><h1>Strategy Lab</h1><p class="hero-copy">Compare every enabled strategy in separate one-share portfolios. These results never affect the main paper account.</p></div>
       <div class="market-note" id="lab-state"><span class="dot"></span><div><strong id="lab-state-title">Checking lab…</strong><small id="lab-state-detail">Loading strategy data</small></div></div>
     </section>
-    <section class="lab-overview" aria-label="Strategy Lab overview"><article><span>Strategies tracked</span><strong id="strategy-count">—</strong><small>Independent virtual portfolios</small></article><article><span>Symbols tested</span><strong id="symbol-count">—</strong><small>Whitelist and Lab-only symbols</small></article><article><span>Best total P/L</span><strong id="best-pnl">—</strong><small id="best-strategy">Waiting for results</small></article><a class="lab-download" href="/api/strategy-lab/export">Download data <span>JSON export →</span></a></section>
+    <section class="lab-overview" aria-label="Strategy Lab overview"><article><span>Strategies tracked</span><strong id="strategy-count">—</strong><small>Independent virtual portfolios</small></article><article><span>Symbols tested</span><strong id="symbol-count">—</strong><small>Whitelist and Lab-only symbols</small></article><article><span>Best total P/L</span><strong id="best-pnl">—</strong><small id="best-strategy">Waiting for results</small></article><button class="lab-download" id="open-lab-export" type="button"><strong>Export data</strong><span>Choose dates · JSON download →</span></button></section>
     <section class="panel lab-chart-panel">
       <div class="panel-title">
         <div><p class="section-kicker">PORTFOLIO PERFORMANCE</p><h2>Total P/L by strategy</h2></div>
@@ -31,7 +31,7 @@
         <span id="symbol-result-count" aria-live="polite">Loading symbols…</span>
       </div>
       <div class="chart-tools">
-        <label for="symbol-search">Search symbols or strategies</label>
+        <label for="symbol-search">Search symbols or top strategies</label>
         <input id="symbol-search" type="search" placeholder="Try AAPL or MACD" autocomplete="off">
       </div>
       <div class="lab-chart" id="symbol-chart"><p class="chart-empty">Loading symbol chart…</p></div>
@@ -56,7 +56,16 @@
       <div class="best-strategies" id="best-strategies" aria-live="polite">Loading stock rankings…</div>
     </section>
   </main>
+  <dialog id="lab-export-dialog" class="lab-export-dialog">
+    <form id="lab-export-form">
+      <div class="lab-export-heading"><div><p class="section-kicker">STRATEGY LAB DATA</p><h2>Export a date range</h2><p>Choose local dates. All time includes the complete saved record.</p></div><button id="close-lab-export" class="icon-button" type="button" aria-label="Close export options">×</button></div>
+      <div class="export-presets" aria-label="Quick date ranges"><button type="button" data-export-range="today">Today</button><button type="button" data-export-range="7">Last 7 days</button><button type="button" data-export-range="30">Last 30 days</button><button type="button" data-export-range="all">All time</button></div>
+      <div class="export-date-fields"><label>From <input id="export-start" type="date"></label><label>Through <input id="export-end" type="date"></label></div>
+      <p id="lab-export-message" class="lab-export-message" aria-live="polite"></p>
+      <div class="lab-export-actions"><button id="cancel-lab-export" class="secondary-button" type="button">Cancel</button><button class="save-button" type="submit">Download JSON</button></div>
+    </form>
+  </dialog>
   <footer><span>Paper trading only — not a live trading or brokerage service.</span><span>Strategy Lab is separate from the command center account.</span></footer>
-  <script src="/static/strategy-lab.js?v=strategy-lab-charts-1"></script>
+  <script src="/static/strategy-lab.js?v=lab-export-range-2"></script>
 </body>
 </html>

@@ -79,29 +79,72 @@ class StrategyLab:
         self._save()
 
 
-def export_data(path: Path = Path("database/strategy_lab.json")) -> dict:
-    """Return the complete local lab record without settings or credentials."""
+def export_data(
+    path: Path = Path("database/strategy_lab.json"),
+    start: datetime | None = None,
+    end: datetime | None = None,
+) -> dict:
+    """Return Strategy Lab history in an optional timestamp window."""
     try:
         state = json.loads(path.read_text(encoding="utf-8"))
     except (FileNotFoundError, json.JSONDecodeError):
         state = {"bars": {}, "portfolios": {}}
+    bounded = start is not None or end is not None
+
+    def normalized(value: datetime) -> datetime:
+        return value.replace(tzinfo=UTC) if value.tzinfo is None else value.astimezone(UTC)
+
+    start_utc = normalized(start) if start else None
+    end_utc = normalized(end) if end else None
+
+    def in_window(value: str | None) -> bool:
+        if not bounded:
+            return True
+        try:
+            timestamp = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        except (TypeError, ValueError):
+            return False
+        timestamp = normalized(timestamp)
+        return (start_utc is None or timestamp >= start_utc) and (end_utc is None or timestamp <= end_utc)
+
     portfolios = []
     for strategy, symbols in sorted(state.get("portfolios", {}).items()):
         for symbol, item in sorted(symbols.items()):
-            closed = int(item.get("closed_trades", 0))
-            wins = int(item.get("wins", 0))
+            trades = item.get("trades", [])
+            if bounded:
+                trades = [trade for trade in trades if in_window(trade.get("exit_time") or trade.get("entry_time"))]
+                open_in_window = bool(item.get("quantity", 0)) and in_window(item.get("entry_time"))
+                if not trades and not open_in_window:
+                    continue
+                closed = len(trades)
+                wins = sum(trade.get("outcome") == "win" for trade in trades)
+                realized_pnl = sum(float(trade.get("pnl", 0)) for trade in trades)
+            else:
+                open_in_window = bool(item.get("quantity", 0))
+                closed = int(item.get("closed_trades", 0))
+                wins = int(item.get("wins", 0))
+                realized_pnl = float(item.get("realized_pnl", 0))
+            quantity = item.get("quantity", 0) if open_in_window else 0
+            entry_price = item.get("average_price") if open_in_window else None
             portfolios.append({
                 "strategy": strategy, "symbol": symbol, "closed_trades": closed,
                 "wins": wins, "losses": closed - wins,
-                "realized_pnl": round(float(item.get("realized_pnl", 0)), 4),
-                "unrealized_pnl": round((float(item.get("current_price", 0)) - float(item.get("average_price", 0))) * float(item.get("quantity", 0)), 4),
-                "open_position": bool(item.get("quantity", 0)), "quantity": item.get("quantity", 0),
-                "entry_price": item.get("average_price") if item.get("quantity", 0) else None,
-                "current_price": item.get("current_price"), "entry_time": item.get("entry_time"),
-                "entry_reason": item.get("entry_reason"), "stop_price": item.get("stop_price"),
-                "take_profit_price": item.get("take_profit_price"), "trades": item.get("trades", []),
+                "realized_pnl": round(realized_pnl, 4),
+                "unrealized_pnl": round((float(item.get("current_price", 0)) - float(item.get("average_price", 0))) * float(quantity), 4),
+                "open_position": bool(quantity), "quantity": quantity,
+                "entry_price": entry_price,
+                "current_price": item.get("current_price"), "entry_time": item.get("entry_time") if open_in_window else None,
+                "entry_reason": item.get("entry_reason") if open_in_window else None,
+                "stop_price": item.get("stop_price") if open_in_window else None,
+                "take_profit_price": item.get("take_profit_price") if open_in_window else None,
+                "trades": trades,
             })
-    return {"format": "trade-bot-strategy-lab-v1", "generated_at": datetime.now(UTC).isoformat(), "last_completed_bar_by_symbol": state.get("bars", {}), "portfolios": portfolios}
+    bars = {symbol: bar for symbol, bar in state.get("bars", {}).items() if in_window(bar)}
+    return {
+        "format": "trade-bot-strategy-lab-v2", "generated_at": datetime.now(UTC).isoformat(),
+        "filters": {"start": start_utc.isoformat() if start_utc else None, "end": end_utc.isoformat() if end_utc else None},
+        "last_completed_bar_by_symbol": bars, "portfolios": portfolios,
+    }
 
 
 def standings(path: Path = Path("database/strategy_lab.json")) -> dict:
