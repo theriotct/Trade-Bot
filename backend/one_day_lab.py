@@ -173,7 +173,11 @@ class OneDayLab:
                         if candles is None or candles.empty:
                             continue
                         candles = normalize_candles(candles, symbol)
-                        state["last_prices"][symbol] = float(candles["Close"].iloc[-1])
+                        candles = candles.loc[:, ~candles.columns.duplicated(keep="first")]
+                        close_prices = candles["Close"]
+                        if getattr(close_prices, "ndim", 1) > 1:
+                            close_prices = close_prices.iloc[:, 0]
+                        state["last_prices"][symbol] = float(close_prices.iloc[-1])
                         last_bar = state["last_bar_by_symbol"].get(symbol)
                         for index_value, bar in candles.iterrows():
                             local_time = self._local_timestamp(index_value)
