@@ -6,25 +6,32 @@ from .config import get_settings
 
 
 def normalize_candles(frame, symbol: str):
-    """Flatten yfinance's optional ticker level into standard OHLCV columns."""
-    if frame is None or frame.empty or getattr(frame.columns, "nlevels", 1) == 1:
+    """Return one unambiguous column for each OHLCV field."""
+    if frame is None or frame.empty:
         return frame
 
     wanted = {symbol.upper(), symbol.replace(".", "-").upper()}
-    for level in range(frame.columns.nlevels):
-        labels = {str(value).upper() for value in frame.columns.get_level_values(level)}
-        match = next((value for value in wanted if value in labels), None)
-        if match is not None:
-            actual = next(value for value in frame.columns.get_level_values(level) if str(value).upper() == match)
-            frame = frame.xs(actual, axis=1, level=level, drop_level=True)
-            break
-
     if getattr(frame.columns, "nlevels", 1) > 1:
-        ohlcv = {"open", "high", "low", "close", "adj close", "volume"}
-        frame.columns = [
-            next((str(value) for value in column if str(value).lower() in ohlcv), str(column[-1]))
-            for column in frame.columns
-        ]
+        for level in range(frame.columns.nlevels):
+            values = list(frame.columns.get_level_values(level))
+            match = next((value for value in values if str(value).upper() in wanted), None)
+            if match is not None:
+                frame = frame.xs(match, axis=1, level=level, drop_level=True)
+                break
+
+    ohlcv = {"open": "Open", "high": "High", "low": "Low", "close": "Close",
+             "adj close": "Adj Close", "volume": "Volume"}
+    columns = []
+    for column in frame.columns:
+        parts = column if isinstance(column, tuple) else (column,)
+        field = next((ohlcv.get(str(value).strip().lower()) for value in parts
+                      if str(value).strip().lower() in ohlcv), None)
+        columns.append(field or str(parts[-1]))
+    frame = frame.copy()
+    frame.columns = columns
+    # yfinance can return repeated field names (including a duplicate Close),
+    # which makes frame["Close"] a DataFrame and breaks scalar price reads.
+    frame = frame.loc[:, ~frame.columns.duplicated(keep="first")]
     return frame
 
 
