@@ -18,7 +18,7 @@ let selectedRankSymbol = null;
 let currentLab = null;
 let currentChartLab = null;
 let chartRange = "all";
-let selectedWinLossSymbol = "";
+let selectedWinLossSymbol = "__all__";
 
 function strategyName(strategy) {
   return labels[strategy] || strategy;
@@ -89,12 +89,23 @@ function renderWinLossChart(chartLab) {
     target.innerHTML = '<p class="chart-empty">No symbol results for this chart range.</p>';
     return;
   }
-  if (!symbols.includes(selectedWinLossSymbol)) selectedWinLossSymbol = symbols[0];
-  const options = symbols.map(symbol => `<option value="${safe(symbol)}">${safe(symbol)}</option>`).join("");
+  if (selectedWinLossSymbol !== "__all__" && !symbols.includes(selectedWinLossSymbol)) selectedWinLossSymbol = "__all__";
+  const options = `<option value="__all__">All · cumulative</option>${symbols.map(symbol => `<option value="${safe(symbol)}">${safe(symbol)}</option>`).join("")}`;
   if (select.innerHTML !== options) select.innerHTML = options;
   select.value = selectedWinLossSymbol;
 
-  const rows = (rankings[selectedWinLossSymbol] || []).map(row => {
+  const sourceRows = selectedWinLossSymbol === "__all__"
+    ? Object.values(rankings).flat()
+    : rankings[selectedWinLossSymbol] || [];
+  const totals = new Map();
+  sourceRows.forEach(row => {
+    const total = totals.get(row.strategy) || { strategy: row.strategy, wins: 0, losses: 0, flats: 0 };
+    total.wins += Number(row.wins) || 0;
+    total.losses += Number(row.losses) || 0;
+    total.flats += Number(row.flats) || 0;
+    totals.set(row.strategy, total);
+  });
+  const rows = [...totals.values()].map(row => {
     const wins = Number(row.wins) || 0;
     const losses = Number(row.losses) || 0;
     const flats = Number(row.flats) || 0;
@@ -104,7 +115,8 @@ function renderWinLossChart(chartLab) {
     .sort((a, b) => b.rate - a.rate || b.outcomes - a.outcomes);
 
   if (!rows.length) {
-    target.innerHTML = `<p class="chart-empty">No closed trades for ${safe(selectedWinLossSymbol)} in this chart range.</p>`;
+    const symbolLabel = selectedWinLossSymbol === "__all__" ? "any symbol" : selectedWinLossSymbol;
+    target.innerHTML = `<p class="chart-empty">No closed trades for ${safe(symbolLabel)} in this chart range.</p>`;
     return;
   }
   target.innerHTML = `<div class="win-loss-rows">${rows.map(row => {
