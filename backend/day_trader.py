@@ -52,15 +52,29 @@ def close_at_end_of_day(symbol: str, database: Database, broker: PaperBroker) ->
     return price
 
 
+def _broker_signature(settings) -> tuple[str, str, str]:
+    if settings.execution_mode == "alpaca_paper":
+        return settings.execution_mode, settings.alpaca_api_key, settings.alpaca_secret_key
+    return settings.execution_mode, "", ""
+
+
+def _build_broker(database: Database, settings) -> PaperBroker:
+    if settings.execution_mode == "alpaca_paper":
+        broker = AlpacaPaperBroker(database, get_alpaca_api(settings.alpaca_api_key, settings.alpaca_secret_key))
+        broker.sync_positions()
+        return broker
+    return PaperBroker(database)
+
+
 def main() -> None:
     auto = AutoTraderSettings()
     settings = get_settings()
     database = Database(settings.database_path)
     database.initialize()
-    broker: PaperBroker = PaperBroker(database)
-    if settings.execution_mode == "alpaca_paper":
-        broker = AlpacaPaperBroker(database, get_alpaca_api(settings.alpaca_api_key, settings.alpaca_secret_key))
-        broker.sync_positions()
+    broker: PaperBroker = _build_broker(database, settings)
+    broker_signature = _broker_signature(settings)
+    broker_ready = True
+    broker_config_error = ""
     risk = RiskManager(database, settings)
     lab = StrategyLab(auto.strategy_lab_enabled)
     news_lab = NewsLab(database)
@@ -76,9 +90,26 @@ def main() -> None:
         settings = get_settings()
         risk.settings = settings
         lab.enabled = auto.strategy_lab_enabled
+        updated_signature = _broker_signature(settings)
+        if updated_signature != broker_signature or not broker_ready:
+            try:
+                # Do not silently abandon open Alpaca positions when switching
+                # to local simulation. Reconcile them before changing brokers.
+                if settings.execution_mode == "local" and isinstance(broker, AlpacaPaperBroker):
+                    if broker.api.positions():
+                        raise AlpacaAPIError("Close all Alpaca paper positions before switching execution to the local simulator")
+                broker = _build_broker(database, settings)
+                broker_signature = updated_signature
+                broker_ready = True
+                broker_config_error = ""
+                logger.info("Applied updated paper execution settings")
+            except Exception as exc:
+                broker_ready = False
+                broker_config_error = str(exc)
+                logger.exception("Could not apply updated paper execution settings")
         now = datetime.now(EASTERN)
         phase = market_phase(now)
-        publish("day_trader", status=phase, symbols=auto.symbols, mode=auto.auto_mode, strategy=auto.auto_strategy, market_time=now.isoformat(), market_data_provider=settings.market_data_provider, execution_mode=settings.execution_mode, news_enabled=settings.news_enabled)
+        publish("day_trader", status=phase, symbols=auto.symbols, mode=auto.auto_mode, strategy=auto.auto_strategy, market_time=now.isoformat(), market_data_provider=settings.market_data_provider, execution_mode=settings.execution_mode, news_enabled=settings.news_enabled, execution_config_status="ready" if broker_ready else "error", message=broker_config_error or None)
         if phase == "trade":
             if settings.news_enabled and settings.news_provider == "alpaca":
                 try:
@@ -87,15 +118,18 @@ def main() -> None:
                 except Exception as exc:
                     logger.exception("News scan failed: %s", exc)
                     publish("news_lab", status="error", provider=settings.news_provider, message=str(exc))
-            for symbol in auto.symbols:
-                try:
-                    if auto.auto_mode == "all_strategies":
-                        process_all_strategies_symbol(symbol, auto, database, lab, news_lab)
-                    else:
-                        process_symbol(symbol, auto, state, database, broker, risk, lab, news_lab)
-                        save_state(state_path, state)
-                except Exception as exc:
-                    logger.exception("%s failed: %s", symbol, exc)
+            if broker_ready or auto.auto_mode == "all_strategies":
+                for symbol in auto.symbols:
+                    try:
+                        if auto.auto_mode == "all_strategies":
+                            process_all_strategies_symbol(symbol, auto, database, lab, news_lab)
+                        else:
+                            process_symbol(symbol, auto, state, database, broker, risk, lab, news_lab)
+                            save_state(state_path, state)
+                    except Exception as exc:
+                        logger.exception("%s failed: %s", symbol, exc)
+            else:
+                logger.error("Main-account scan paused until execution settings are reconciled: %s", broker_config_error)
             if lab.enabled:
                 live_symbols = set(auto.symbols)
                 for symbol in auto.lab_symbols:
@@ -106,6 +140,10 @@ def main() -> None:
                     except Exception as exc:
                         logger.exception("Strategy Lab %s failed: %s", symbol, exc)
         elif phase == "liquidate" and now.date().isoformat() not in closed_dates:
+            if not broker_ready:
+                logger.error("End-of-day exits paused until execution settings are reconciled: %s", broker_config_error)
+                time.sleep(max(auto.auto_poll_seconds, 30))
+                continue
             closing_prices: dict[str, float] = {}
             for symbol in auto.lab_symbols:
                 try:
