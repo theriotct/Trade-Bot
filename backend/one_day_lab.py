@@ -6,6 +6,7 @@ from datetime import date, datetime, time
 from zoneinfo import ZoneInfo
 
 from .database import Database
+from .market_data import normalize_candles
 from .strategies import AVAILABLE, evaluate
 
 logger = logging.getLogger(__name__)
@@ -171,6 +172,7 @@ class OneDayLab:
                         candles = candles_by_symbol.get(symbol)
                         if candles is None or candles.empty:
                             continue
+                        candles = normalize_candles(candles, symbol)
                         state["last_prices"][symbol] = float(candles["Close"].iloc[-1])
                         last_bar = state["last_bar_by_symbol"].get(symbol)
                         for index_value, bar in candles.iterrows():
