@@ -173,8 +173,31 @@
 
 .one-day-actions {
   display: flex;
+  align-items: center;
+  gap: 9px;
   justify-content: flex-end;
   margin-top: 5px;
+}
+
+.quiet-button {
+  padding: 9px 13px;
+  border: 1px solid #314766;
+  border-radius: 8px;
+  background: rgba(12, 24, 42, .6);
+  color: #9fb3cc;
+  font: inherit;
+  font-size: .76rem;
+  cursor: pointer;
+}
+
+.quiet-button:hover:not(:disabled) {
+  border-color: #4c6a90;
+  color: #d9e7fa;
+}
+
+.quiet-button:disabled {
+  opacity: .55;
+  cursor: wait;
 }
 
 .one-day-plans {
@@ -326,6 +349,11 @@
 }
 
 @media (max-width: 560px) {
+  .one-day-actions {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+
   .one-day-form-panel form,
   .one-day-plans {
     padding-right: 15px;

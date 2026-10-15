@@ -1,7 +1,9 @@
 from contextlib import asynccontextmanager
 import csv
 import io
-from datetime import UTC, date, datetime, timedelta
+import json
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -19,6 +21,7 @@ from .strategy_lab import export_data, standings
 from .news_lab import NewsLab
 from .one_day_lab import OneDayLab
 from .strategies import AVAILABLE
+import yfinance as yf
 
 settings = get_settings()
 database = Database(settings.database_path)
@@ -50,6 +53,10 @@ class OneDayQueueRequest(BaseModel):
         if not normalized:
             raise ValueError("Choose at least one symbol.")
         return normalized
+
+
+class OneDayBacktestRequest(OneDayQueueRequest):
+    symbols: list[str] = Field(min_length=1, max_length=20)
 
 
 @asynccontextmanager
@@ -247,6 +254,80 @@ def one_day_lab_queue(request: OneDayQueueRequest) -> dict:
         request.target_date, request.symbols, strategies,
         request.loss_limit, request.starting_amount, request.max_open_positions,
     )
+
+
+def _fetch_yfinance_backtest(symbol: str, target_day: date):
+    start_day = target_day - timedelta(days=6)
+    frame = yf.download(
+        symbol.replace(".", "-"), start=start_day.isoformat(),
+        end=(target_day + timedelta(days=1)).isoformat(), interval="1m",
+        auto_adjust=True, progress=False, multi_level_index=False,
+        threads=False, timeout=20,
+    )
+    if frame is None or frame.empty:
+        raise ValueError("Yahoo Finance returned no one-minute bars")
+    if getattr(frame.index, "tz", None) is None:
+        frame.index = frame.index.tz_localize(EASTERN)
+    else:
+        frame.index = frame.index.tz_convert(EASTERN)
+    cutoff = datetime.combine(target_day, time(15, 55), tzinfo=EASTERN)
+    return frame.loc[frame.index <= cutoff]
+
+
+@app.post("/api/one-day-lab/backtest")
+def one_day_lab_backtest(request: OneDayBacktestRequest) -> dict:
+    today = datetime.now(EASTERN).date()
+    oldest_supported = today - timedelta(days=3)
+    if not oldest_supported <= request.target_date < today:
+        raise HTTPException(
+            status_code=422,
+            detail="Choose a completed weekday from the last three calendar days. Yahoo Finance only provides a short rolling window of one-minute history, and the test needs earlier bars to warm up its indicators.",
+        )
+    if request.target_date.weekday() >= 5:
+        raise HTTPException(status_code=422, detail="Choose a weekday with a completed market session.")
+    available = set(AutoTraderSettings().lab_symbols) | get_settings().allowed_symbols
+    invalid = sorted(set(request.symbols) - available)
+    if invalid:
+        raise HTTPException(status_code=422, detail=f"Symbols are not in the configured allowed list: {', '.join(invalid)}")
+
+    frames = {}
+    failures = {}
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        futures = {pool.submit(_fetch_yfinance_backtest, symbol, request.target_date): symbol for symbol in request.symbols}
+        for future in as_completed(futures):
+            symbol = futures[future]
+            try:
+                frame = future.result()
+                if frame.empty:
+                    raise ValueError("No bars available through 3:55 p.m. ET")
+                frames[symbol] = frame
+            except Exception as exc:
+                failures[symbol] = str(exc)
+    if failures:
+        details = "; ".join(f"{symbol}: {reason}" for symbol, reason in sorted(failures.items()))
+        raise HTTPException(status_code=502, detail=f"Historical data unavailable; no backtest was saved. {details}")
+
+    strategies = sorted(AVAILABLE) if request.strategy == "all" else [request.strategy]
+    plan = one_day_lab.queue(
+        request.target_date, request.symbols, strategies,
+        request.loss_limit, request.starting_amount, request.max_open_positions,
+        mode="historical_backtest",
+    )
+    simulated_close = datetime.combine(request.target_date, time(15, 55), tzinfo=EASTERN)
+    one_day_lab.tick(simulated_close, frames, market_open=True, market_close=True)
+    with database.connection() as connection:
+        row = connection.execute("SELECT * FROM one_day_test_plans WHERE id=?", (plan["id"],)).fetchone()
+        state = json.loads(row["state_json"])
+        if state.get("report"):
+            if row["status"] == "completed":
+                state["report"]["summary"] = "Historical Yahoo Finance one-minute backtest; signals were replayed chronologically and paper positions closed by 3:55 p.m. ET."
+            state["report"]["data_source"] = "Yahoo Finance · 1-minute bars"
+            connection.execute(
+                "UPDATE one_day_test_plans SET state_json=?,updated_at=? WHERE id=?",
+                (json.dumps(state), datetime.now(EASTERN).isoformat(), plan["id"]),
+            )
+    result = next(item for item in one_day_lab.list_plans() if item["id"] == plan["id"])
+    return result
 
 
 @app.post("/api/one-day-lab/{plan_id}/cancel")

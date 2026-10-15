@@ -25,6 +25,14 @@ function nextWeekday() {
   return date.toISOString().slice(0, 10);
 }
 
+function todayEastern() {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit"
+  }).formatToParts(new Date());
+  const part = name => parts.find(item => item.type === name).value;
+  return `${part("year")}-${part("month")}-${part("day")}`;
+}
+
 function renderSymbols() {
   const query = byId("symbol-filter").value.trim().toUpperCase();
   byId("symbol-options").innerHTML = symbols.map(symbol => `
@@ -74,7 +82,7 @@ function renderReport(plan) {
   }).join("");
   return `<details class="plan-report" ${plan.status === "completed" ? "" : ""}>
     <summary>${plan.status === "completed" ? "Open end-of-day report" : "View run details"}</summary>
-    <div class="plan-report-summary"><p>${safe(report.summary || "")}</p>${report.realized_pnl !== undefined ? `<span>Starting capital: ${money.format(report.total_starting_amount)}</span><span>Realized P/L: ${pnl(report.realized_pnl)}</span><span>Return: ${Number(report.return_pct || 0).toFixed(2)}%</span><span>${report.closed_trades} closes · ${report.wins} wins · ${report.losses} losses</span>${report.skipped_entries ? `<span>${report.skipped_entries} entry signals skipped at position cap</span>` : ""}` : ""}</div>
+    <div class="plan-report-summary"><p>${safe(report.summary || "")}</p>${report.data_source ? `<span>Data: ${safe(report.data_source)}</span>` : ""}${report.realized_pnl !== undefined ? `<span>Starting capital: ${money.format(report.total_starting_amount)}</span><span>Realized P/L: ${pnl(report.realized_pnl)}</span><span>Return: ${Number(report.return_pct || 0).toFixed(2)}%</span><span>${report.closed_trades} closes · ${report.wins} wins · ${report.losses} losses</span>${report.skipped_entries ? `<span>${report.skipped_entries} entry signals skipped at position cap</span>` : ""}` : ""}</div>
     <div class="plan-report-table"><table><thead><tr><th>Symbol</th><th>Strategy</th><th>Closed outcomes</th><th>Realized P/L</th><th>Return</th><th>Risk / entries</th><th>Trade details</th></tr></thead><tbody>${rows}</tbody></table></div>
   </details>`;
 }
@@ -88,7 +96,8 @@ function renderPlans() {
   target.innerHTML = plans.map(plan => {
     const allStrategies = plan.strategies.length > 1;
     const strategyText = allStrategies ? `All strategies (${plan.strategies.length})` : strategyName(plan.strategies[0]);
-    const title = `${plan.target_date} · ${strategyText}`;
+    const modeLabel = plan.mode === "historical_backtest" ? " · Historical backtest" : "";
+    const title = `${plan.target_date} · ${strategyText}${modeLabel}`;
     const meta = `${plan.symbols.join(", ")} · ${money.format(plan.starting_amount)} per symbol–strategy run · ${money.format(plan.loss_limit)} pair loss limit · up to ${plan.max_open_positions} open at once`;
     const progress = plan.progress
       ? `${plan.progress.closed_trades} closed · ${plan.progress.open_positions} open · ${plan.progress.stopped_pairs} stopped · ${pnl(plan.progress.realized_pnl)} realized`
@@ -157,13 +166,9 @@ byId("clear-symbols").addEventListener("click", () => {
   renderSymbols();
 });
 byId("refresh-plans").addEventListener("click", load);
-byId("one-day-form").addEventListener("submit", async event => {
-  event.preventDefault();
-  const message = byId("form-message");
-  if (!selectedSymbols.size) return setMessage("Choose at least one symbol.", true);
-  if (selectedSymbols.size > 100) return setMessage("Choose no more than 100 symbols per run.", true);
+function buildPayload() {
   const strategy = byId("test-strategy").value;
-  const payload = {
+  return {
     target_date: byId("test-date").value,
     symbols: [...selectedSymbols],
     strategy,
@@ -171,23 +176,62 @@ byId("one-day-form").addEventListener("submit", async event => {
     starting_amount: Number(byId("starting-amount").value),
     max_open_positions: Number(byId("max-open-positions").value)
   };
-  const button = event.submitter;
+}
+
+async function submitRun(url, button, messageText, successText) {
+  const payload = buildPayload();
   button.disabled = true;
-  message.textContent = "Queueing paper test…";
+  byId("form-message").textContent = messageText;
+  byId("form-message").className = "form-message";
   try {
-    const response = await fetch("/api/one-day-lab/queue", {
+    const response = await fetch(url, {
       method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
     });
     const result = await response.json();
-    if (!response.ok) throw new Error(result.detail || "Could not queue the test.");
-    setMessage(`Queued ${result.target_date} test with ${result.symbols.length * result.strategies.length} independent runs.`);
-    await load();
+    if (!response.ok) {
+      const detail = result.detail;
+      const errorText = typeof detail === "string" ? detail
+        : Array.isArray(detail) ? detail.map(item => item.msg).join("; ")
+          : "Could not start the test.";
+      throw new Error(errorText);
+    }
+    if (url.endsWith("/backtest")) {
+      plans = [result, ...plans.filter(plan => plan.id !== result.id)].slice(0, 50);
+      renderPlans();
+      setMessage(result.status === "completed" ? successText : (result.report?.summary || "The backtest could not complete."), result.status !== "completed");
+    } else {
+      setMessage(`${successText} ${result.target_date} test with ${result.symbols.length * result.strategies.length} independent runs.`);
+      await load();
+    }
     byId("one-day-plans").scrollIntoView({ behavior: "smooth", block: "start" });
   } catch (error) {
     setMessage(error.message, true);
   } finally {
     button.disabled = false;
   }
+}
+
+byId("one-day-form").addEventListener("submit", async event => {
+  event.preventDefault();
+  if (!selectedSymbols.size) return setMessage("Choose at least one symbol.", true);
+  if (selectedSymbols.size > 100) return setMessage("Choose no more than 100 symbols per run.", true);
+  await submitRun("/api/one-day-lab/queue", event.submitter, "Queueing paper test…", "Queued");
+});
+
+byId("backtest-past-day").addEventListener("click", async event => {
+  if (!byId("one-day-form").reportValidity()) return;
+  if (!selectedSymbols.size) return setMessage("Choose at least one symbol.", true);
+  if (selectedSymbols.size > 20) return setMessage("Historical backtests are limited to 20 symbols to keep Yahoo Finance requests and replay time manageable.", true);
+  const today = todayEastern();
+  const date = byId("test-date").value;
+  const min = new Date(`${today}T00:00:00Z`);
+  min.setUTCDate(min.getUTCDate() - 3);
+  const oldest = min.toISOString().slice(0, 10);
+  if (!date || date < oldest || date >= today) return setMessage("Choose a completed date from the last three calendar days.", true);
+  const [year, month, day] = date.split("-").map(Number);
+  const weekday = new Date(Date.UTC(year, month - 1, day)).getUTCDay();
+  if (weekday === 0 || weekday === 6) return setMessage("Choose a weekday with a completed market session.", true);
+  await submitRun("/api/one-day-lab/backtest", event.currentTarget, "Fetching recent Yahoo Finance one-minute bars and replaying strategies…", "Historical backtest complete and saved.");
 });
 
 load();

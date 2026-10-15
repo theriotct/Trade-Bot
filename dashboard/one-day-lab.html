@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>One-day Strategy Lab · Paper Desk</title>
   <link rel="stylesheet" href="/static/styles.css?v=one-day-lab-1">
-  <link rel="stylesheet" href="/static/one-day-lab.css?v=one-day-lab-1">
+  <link rel="stylesheet" href="/static/one-day-lab.css?v=one-day-lab-2">
 </head>
 <body>
   <header class="topbar">
@@ -24,7 +24,7 @@
       <div class="panel-title"><div><p class="section-kicker">BUILD A TEST</p><h2>Queue a market session</h2></div><span>Market times: Eastern</span></div>
       <form id="one-day-form">
         <div class="one-day-fields">
-          <label>Test date<input id="test-date" name="target_date" type="date" required><small>Weekdays only. A market holiday or missing session data will be marked as missed.</small></label>
+          <label>Test date<input id="test-date" name="target_date" type="date" required><small>Queue weekdays ahead, or choose a completed day from the recent Yahoo Finance one-minute history window to backtest.</small></label>
           <label>Strategy<select id="test-strategy" name="strategy" required></select><small>All strategies runs each strategy independently.</small></label>
           <label>Starting amount per run ($)<input id="starting-amount" name="starting_amount" type="number" min="100" max="1000000" step="100" value="10000" required><small>Each symbol–strategy pair gets this amount; fractional shares are simulated.</small></label>
           <label>Daily loss limit ($)<input id="loss-limit" name="loss_limit" type="number" min="1" max="5000" step="1" value="30" required><small>Closes and stops a pair once its realized plus open loss reaches this amount.</small></label>
@@ -39,7 +39,7 @@
 
         <div class="queue-preview"><span id="run-preview">0 independent runs</span><span id="capital-preview">$0 virtual starting capital</span></div>
         <p id="form-message" class="form-message" aria-live="polite"></p>
-        <div class="one-day-actions"><button class="save-button" type="submit">Queue test</button></div>
+        <div class="one-day-actions"><button class="quiet-button" id="backtest-past-day" type="button">Backtest past day</button><button class="save-button" type="submit">Queue test</button></div>
       </form>
     </section>
 
@@ -49,6 +49,6 @@
     </section>
   </main>
   <footer><span>Paper trading only — no live orders are submitted.</span><span>Each run is stored separately from the command-center paper account and Strategy Lab.</span></footer>
-  <script src="/static/one-day-lab.js?v=one-day-lab-1"></script>
+  <script src="/static/one-day-lab.js?v=one-day-lab-2"></script>
 </body>
 </html>

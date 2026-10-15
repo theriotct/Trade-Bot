@@ -43,12 +43,13 @@ class OneDayLab:
             ).fetchall()
         return [self._decode(row) for row in rows]
 
-    def queue(self, target_date: date, symbols: list[str], strategies: list[str], loss_limit: float, starting_amount: float, max_open_positions: int) -> dict:
+    def queue(self, target_date: date, symbols: list[str], strategies: list[str], loss_limit: float, starting_amount: float, max_open_positions: int, mode: str = "scheduled") -> dict:
         now = datetime.now(EASTERN).isoformat()
         identifier = uuid.uuid4().hex
         config = {
             "symbols": symbols, "strategies": strategies, "loss_limit": loss_limit,
             "starting_amount": starting_amount, "max_open_positions": max_open_positions,
+            "mode": mode,
         }
         pairs = {
             f"{symbol}:{strategy}": {
@@ -165,6 +166,7 @@ class OneDayLab:
             elif target_day == now.date():
                 if market_open or market_close:
                     status = "running"
+                    events = []
                     for symbol in config["symbols"]:
                         candles = candles_by_symbol.get(symbol)
                         if candles is None or candles.empty:
@@ -183,37 +185,42 @@ class OneDayLab:
                             if len(history) < 205:
                                 last_bar = bar_id
                                 continue
-                            price = float(bar["Close"])
-                            low = float(bar["Low"])
-                            for strategy in config["strategies"]:
-                                pair = state["pairs"][f"{symbol}:{strategy}"]
-                                if pair["stopped"]:
-                                    continue
-                                if pair["quantity"]:
-                                    worst_pnl = float(pair["realized_pnl"]) + (low - float(pair["average_price"])) * float(pair["quantity"])
-                                    if worst_pnl <= -float(config["loss_limit"]):
-                                        stop_price = float(pair["average_price"]) + (-float(config["loss_limit"]) - float(pair["realized_pnl"])) / float(pair["quantity"])
-                                        self._close(pair, max(low, stop_price), local_time.isoformat(), "Daily loss limit")
-                                        pair["stopped"] = True
-                                        continue
-                                    signal = evaluate(strategy, history)
-                                    if signal and signal.action == "close":
-                                        self._close(pair, price, local_time.isoformat(), signal.reason)
-                                elif float(pair["realized_pnl"]) <= -float(config["loss_limit"]):
-                                    pair["stopped"] = True
-                                else:
-                                    signal = evaluate(strategy, history)
-                                    if signal and signal.action == "buy":
-                                        cash = float(pair.get("cash_balance", config["starting_amount"]))
-                                        quantity = cash / price if price > 0 else 0
-                                        open_pairs = sum(bool(item["quantity"]) for item in state["pairs"].values())
-                                        if open_pairs >= int(config["max_open_positions"]):
-                                            pair["skipped_entries"] += 1
-                                        elif quantity:
-                                            pair.update(quantity=quantity, average_price=price, cash_balance=0.0, entry_time=local_time.isoformat(), entry_reason=signal.reason)
+                            events.append((local_time, symbol, bar_id, bar, history))
                             last_bar = bar_id
                         if last_bar:
                             state["last_bar_by_symbol"][symbol] = last_bar
+
+                    # Replay bars across every symbol in timestamp order so the
+                    # simultaneous-position cap reflects actual overlap.
+                    for local_time, symbol, _bar_id, bar, history in sorted(events, key=lambda event: (event[0], event[1])):
+                        price = float(bar["Close"])
+                        low = float(bar["Low"])
+                        for strategy in config["strategies"]:
+                            pair = state["pairs"][f"{symbol}:{strategy}"]
+                            if pair["stopped"]:
+                                continue
+                            if pair["quantity"]:
+                                worst_pnl = float(pair["realized_pnl"]) + (low - float(pair["average_price"])) * float(pair["quantity"])
+                                if worst_pnl <= -float(config["loss_limit"]):
+                                    stop_price = float(pair["average_price"]) + (-float(config["loss_limit"]) - float(pair["realized_pnl"])) / float(pair["quantity"])
+                                    self._close(pair, max(low, stop_price), local_time.isoformat(), "Daily loss limit")
+                                    pair["stopped"] = True
+                                    continue
+                                signal = evaluate(strategy, history)
+                                if signal and signal.action == "close":
+                                    self._close(pair, price, local_time.isoformat(), signal.reason)
+                            elif float(pair["realized_pnl"]) <= -float(config["loss_limit"]):
+                                pair["stopped"] = True
+                            else:
+                                signal = evaluate(strategy, history)
+                                if signal and signal.action == "buy":
+                                    cash = float(pair.get("cash_balance", config["starting_amount"]))
+                                    quantity = cash / price if price > 0 else 0
+                                    open_pairs = sum(bool(item["quantity"]) for item in state["pairs"].values())
+                                    if open_pairs >= int(config["max_open_positions"]):
+                                        pair["skipped_entries"] += 1
+                                    elif quantity:
+                                        pair.update(quantity=quantity, average_price=price, cash_balance=0.0, entry_time=local_time.isoformat(), entry_reason=signal.reason)
 
                 if market_close:
                     finished = [pair for pair in state["pairs"].values()]
