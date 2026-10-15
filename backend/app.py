@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field, field_validator
 from .auto_trader import AutoTraderSettings
 from .config import get_settings
 from .database import Database
+from .market_data import normalize_candles
 from .runtime_status import read as read_runtime_status
 from .settings_store import DashboardSettings, current as current_settings, save as save_settings
 from .strategy_lab import export_data, standings
@@ -268,6 +269,7 @@ def _fetch_yfinance_backtest(symbol: str, target_day: date):
     )
     if frame is None or frame.empty:
         raise ValueError("Yahoo Finance returned no one-minute bars")
+    frame = normalize_candles(frame, symbol)
     if getattr(frame.index, "tz", None) is None:
         frame.index = frame.index.tz_localize(EASTERN)
     else:
