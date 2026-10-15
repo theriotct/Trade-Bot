@@ -150,7 +150,7 @@
 }
 
 .symbol-card-heading {
-  grid-column: 1;
+  grid-column: 1 / -1;
   grid-row: 1;
   display: flex;
   align-items: center;
@@ -159,8 +159,8 @@
 }
 
 .symbol-card-heading strong {
-  flex: 0 0 4ch;
-  width: 4ch;
+  flex: 0 0 5.5ch;
+  width: 5.5ch;
   color: #f4f7fb;
   font-size: .98rem;
   letter-spacing: .015em;
@@ -168,6 +168,7 @@
 }
 
 .symbol-best {
+  flex: 0 0 auto;
   border: 1px solid rgba(74, 222, 128, .2);
   border-radius: 999px;
   background: rgba(22, 101, 52, .2);
@@ -191,7 +192,7 @@
 
 .symbol-card-value {
   grid-column: 2;
-  grid-row: 1 / span 2;
+  grid-row: 2;
   align-self: center;
   font-size: .85rem;
   font-weight: 750;
